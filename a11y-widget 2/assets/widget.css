@@ -285,6 +285,85 @@
 }
 .a11y-card .meta { display: grid; gap: 4px; }
 .a11y-card .label { font-weight: 600; font-size: 1.05rem; }
+.a11y-card--dyslexie {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.a11y-card--dyslexie.is-disabled {
+  opacity: .85;
+}
+.a11y-dyslexie__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.a11y-card--dyslexie .meta {
+  flex: 1 1 auto;
+  gap: 6px;
+}
+.a11y-card--dyslexie .meta .hint {
+  font-size: .9rem;
+  color: #555;
+}
+.a11y-dyslexie__switch {
+  margin-left: auto;
+}
+.a11y-dyslexie__controls {
+  display: grid;
+  gap: 12px;
+}
+.a11y-dyslexie__controls.is-disabled {
+  opacity: .6;
+}
+.a11y-dyslexie__field {
+  display: grid;
+  gap: 6px;
+}
+.a11y-dyslexie__field label {
+  font-size: .95rem;
+  font-weight: 600;
+}
+.a11y-dyslexie__input {
+  border: 1px solid var(--a11y-border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 1rem;
+  background: var(--a11y-surface);
+  color: var(--a11y-text);
+}
+.a11y-dyslexie__input:focus-visible {
+  outline: 3px solid #000;
+  outline-offset: 2px;
+}
+.a11y-dyslexie__input--color {
+  width: 64px;
+  height: 40px;
+  padding: 0;
+}
+.a11y-dyslexie__field--checkbox {
+  display: flex;
+  align-items: center;
+}
+.a11y-dyslexie__checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .95rem;
+}
+.a11y-dyslexie__checkbox-input {
+  width: 20px;
+  height: 20px;
+}
+.a11y-dyslexie__checkbox-input:focus-visible {
+  outline: 3px solid #000;
+  outline-offset: 2px;
+}
+.a11y-dyslexie__message {
+  margin: 0;
+  font-size: .9rem;
+  color: #b83a0f;
+}
 .a11y-subfeatures {
   display: grid;
   gap: 12px;
@@ -321,6 +400,14 @@
 .a11y-switch input:checked + .track { background: var(--a11y-primary); }
 .a11y-switch input:checked ~ .thumb { transform: translateX(18px); }
 .a11y-switch input:focus-visible + .track { outline: 3px solid #000; outline-offset: 2px; }
+
+.a11y-letter-highlight {
+  background: var(--a11y-dyslexie-color, #ffeb3b);
+  box-shadow: 0 0 0 2px var(--a11y-dyslexie-color, #ffeb3b);
+  border-radius: 6px;
+  padding: 0 0.15em;
+  color: inherit;
+}
 
 /* Footer */
 .a11y-footer { padding: 10px; border-top: 1px solid var(--a11y-border); background: var(--a11y-surface-elev); display: flex; gap: 8px; justify-content: space-between; }

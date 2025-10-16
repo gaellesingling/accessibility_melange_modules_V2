@@ -130,6 +130,32 @@
                         'aria_label' => wp_strip_all_tags( $feature_aria_label ),
                     );
 
+                    if ( isset( $feature['template'] ) ) {
+                        $feature_template = sanitize_key( $feature['template'] );
+                        if ( '' !== $feature_template ) {
+                            $feature_payload['template'] = $feature_template;
+                        }
+                    }
+
+                    if ( isset( $feature['settings'] ) && is_array( $feature['settings'] ) ) {
+                        $settings_payload = array();
+                        foreach ( $feature['settings'] as $setting_key => $setting_value ) {
+                            $setting_slug = sanitize_key( $setting_key );
+
+                            if ( '' === $setting_slug ) {
+                                continue;
+                            }
+
+                            if ( is_scalar( $setting_value ) ) {
+                                $settings_payload[ $setting_slug ] = wp_strip_all_tags( (string) $setting_value );
+                            }
+                        }
+
+                        if ( ! empty( $settings_payload ) ) {
+                            $feature_payload['settings'] = $settings_payload;
+                        }
+                    }
+
                     if ( ! empty( $children_payload ) ) {
                         $feature_payload['children'] = $children_payload;
                     }
