@@ -149,6 +149,20 @@ function a11y_widget_get_default_sections() {
                     'aria_label'  => __( 'Exemple de réglage cognitif', 'a11y-widget' ),
                     'placeholder' => true,
                 ),
+                array(
+                    'slug'       => 'cognitif-dyslexie',
+                    'label'      => __( 'Dyslexie', 'a11y-widget' ),
+                    'hint'       => __( 'Surlignez une lettre dans la page pour faciliter le repérage visuel.', 'a11y-widget' ),
+                    'aria_label' => __( 'Activer le surligneur de lettres', 'a11y-widget' ),
+                    'template'   => 'dyslexie-highlighter',
+                    'settings'   => array(
+                        'letter_label'        => __( 'Lettre à surligner', 'a11y-widget' ),
+                        'letter_placeholder'  => __( 'Entrez une lettre', 'a11y-widget' ),
+                        'color_label'         => __( 'Couleur du surlignage', 'a11y-widget' ),
+                        'accent_label'        => __( 'Prendre les accents en compte', 'a11y-widget' ),
+                        'no_letter_warning'   => __( 'Saisissez une lettre pour commencer le surlignage.', 'a11y-widget' ),
+                    ),
+                ),
             ),
         ),
         array(

@@ -81,6 +81,13 @@
     else { panel.setAttribute('aria-hidden','false'); }
   });
 
+  const DYSLEXIA_SLUG = 'cognitif-dyslexie';
+  const DYSLEXIA_SETTINGS_KEY = 'a11y-widget-dyslexie-settings:v1';
+  const DYSLEXIA_DEFAULT_COLOR = '#ffeb3b';
+  const dyslexiaInstances = new Set();
+  let dyslexiaSettings = loadDyslexiaSettings();
+  let dyslexiaActive = false;
+
   const featureInputs = new Map();
   const renderedSections = new Set();
   let featureState = loadStoredState();
@@ -407,6 +414,461 @@
     return article;
   }
 
+  let dyslexiaIdCounter = 0;
+
+  function sanitizeDyslexiaLetter(value){
+    if(typeof value !== 'string'){ return ''; }
+    const trimmed = value.trim();
+    if(!trimmed){ return ''; }
+    const first = Array.from(trimmed)[0];
+    return typeof first === 'string' ? first : '';
+  }
+
+  function normalizeDyslexiaColor(value){
+    if(typeof value !== 'string'){ return DYSLEXIA_DEFAULT_COLOR; }
+    const trimmed = value.trim();
+    const match = trimmed.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+    if(!match){ return DYSLEXIA_DEFAULT_COLOR; }
+    let digits = match[1];
+    if(digits.length === 3){
+      digits = digits.split('').map(ch => ch + ch).join('');
+    }
+    return ('#' + digits).toLowerCase();
+  }
+
+  function loadDyslexiaSettings(){
+    const defaults = { letter: '', color: DYSLEXIA_DEFAULT_COLOR, accentSensitive: false };
+    try {
+      const raw = localStorage.getItem(DYSLEXIA_SETTINGS_KEY);
+      if(!raw){ return Object.assign({}, defaults); }
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
+      const letter = sanitizeDyslexiaLetter(typeof parsed.letter === 'string' ? parsed.letter : '');
+      const color = normalizeDyslexiaColor(typeof parsed.color === 'string' ? parsed.color : DYSLEXIA_DEFAULT_COLOR);
+      const accentSensitive = !!parsed.accentSensitive;
+      return { letter, color, accentSensitive };
+    } catch(err){
+      return Object.assign({}, defaults);
+    }
+  }
+
+  function persistDyslexiaSettings(){
+    try { localStorage.setItem(DYSLEXIA_SETTINGS_KEY, JSON.stringify(dyslexiaSettings)); } catch(err){ /* ignore */ }
+  }
+
+  function setInputValue(input, value){
+    if(input && input.value !== value){
+      input.value = value;
+    }
+  }
+
+  function setCheckboxState(input, checked){
+    if(input && input.checked !== checked){
+      input.checked = checked;
+    }
+  }
+
+  function pruneDyslexiaInstances(){
+    dyslexiaInstances.forEach(instance => {
+      if(!instance){
+        dyslexiaInstances.delete(instance);
+        return;
+      }
+      if(instance.wasConnected && (!instance.article || !instance.article.isConnected)){
+        dyslexiaInstances.delete(instance);
+      }
+    });
+  }
+
+  function syncDyslexiaInstances(){
+    pruneDyslexiaInstances();
+    dyslexiaInstances.forEach(instance => updateDyslexiaInstanceUI(instance));
+  }
+
+  function updateDyslexiaInstanceUI(instance){
+    if(!instance){ return; }
+    const { article, controls, letterInput, colorInput, accentInput, message, settings = {} } = instance;
+    const active = dyslexiaActive;
+    if(article){
+      if(article.isConnected){ instance.wasConnected = true; }
+      article.classList.toggle('is-disabled', !active);
+    }
+    if(controls){
+      controls.classList.toggle('is-disabled', !active);
+      if(!active){ controls.setAttribute('aria-disabled', 'true'); }
+      else { controls.removeAttribute('aria-disabled'); }
+    }
+    if(letterInput){
+      letterInput.disabled = !active;
+      setInputValue(letterInput, dyslexiaSettings.letter || '');
+      const placeholder = typeof settings.letter_placeholder === 'string' ? settings.letter_placeholder : '';
+      if(placeholder){ letterInput.setAttribute('placeholder', placeholder); }
+      else { letterInput.removeAttribute('placeholder'); }
+    }
+    if(colorInput){
+      colorInput.disabled = !active;
+      setInputValue(colorInput, dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR);
+    }
+    if(accentInput){
+      accentInput.disabled = !active;
+      setCheckboxState(accentInput, !!dyslexiaSettings.accentSensitive);
+      const accentLabel = accentInput.nextElementSibling && accentInput.nextElementSibling.matches('[data-role="dyslexie-accent-label"]')
+        ? accentInput.nextElementSibling
+        : null;
+      if(accentLabel){
+        const text = typeof settings.accent_label === 'string' ? settings.accent_label : '';
+        if(text){ accentLabel.textContent = text; }
+      }
+    }
+    if(message){
+      const warning = typeof settings.no_letter_warning === 'string' ? settings.no_letter_warning : '';
+      if(warning){
+        message.textContent = warning;
+      }
+      const shouldShow = active && !dyslexiaSettings.letter && !!warning;
+      message.hidden = !shouldShow;
+    }
+  }
+
+  function stripDyslexiaAccents(value){
+    if(typeof value !== 'string'){ return ''; }
+    if(typeof value.normalize === 'function'){
+      return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }
+    return value;
+  }
+
+  function dyslexiaCharMatches(char, baseLetter, normalizedLetter, accentSensitive){
+    if(!char){ return false; }
+    if(accentSensitive){
+      return char.toLocaleLowerCase() === baseLetter;
+    }
+    const normalized = stripDyslexiaAccents(char).toLocaleLowerCase();
+    return normalized === normalizedLetter;
+  }
+
+  function clearDyslexiaHighlights(){
+    const highlights = document.querySelectorAll('.a11y-letter-highlight');
+    highlights.forEach(span => {
+      const parent = span.parentNode;
+      if(!parent){ return; }
+      const text = span.textContent || '';
+      const node = document.createTextNode(text);
+      parent.replaceChild(node, span);
+      if(parent.normalize){ parent.normalize(); }
+    });
+  }
+
+  function buildDyslexiaFragments(text, baseLetter, normalizedLetter, accentSensitive, color){
+    if(!text){ return null; }
+    const chars = Array.from(text);
+    if(!chars.length){ return null; }
+    const nodes = [];
+    let buffer = '';
+    let matched = false;
+    chars.forEach(char => {
+      if(dyslexiaCharMatches(char, baseLetter, normalizedLetter, accentSensitive)){
+        matched = true;
+        if(buffer){
+          nodes.push(document.createTextNode(buffer));
+          buffer = '';
+        }
+        const span = document.createElement('span');
+        span.className = 'a11y-letter-highlight';
+        span.textContent = char;
+        span.style.setProperty('--a11y-dyslexie-color', color);
+        span.style.backgroundColor = color;
+        span.style.boxShadow = `0 0 0 2px ${color}`;
+        nodes.push(span);
+      } else {
+        buffer += char;
+      }
+    });
+    if(!matched){
+      return null;
+    }
+    if(buffer){
+      nodes.push(document.createTextNode(buffer));
+    }
+    return nodes;
+  }
+
+  function shouldSkipDyslexiaNode(node){
+    if(!node || !node.parentNode){ return true; }
+    const parent = node.parentNode;
+    if(parent.nodeType !== Node.ELEMENT_NODE){ return true; }
+    if(!node.nodeValue || !node.nodeValue.trim()){ return true; }
+    if(parent.closest && (parent.closest('#a11y-overlay') || parent.closest('#a11y-launcher'))){
+      return true;
+    }
+    const tag = parent.tagName;
+    if(tag){
+      const blacklist = ['SCRIPT','STYLE','NOSCRIPT','TEXTAREA','INPUT','SELECT','OPTION','BUTTON','CODE','PRE','KBD','SAMP','SVG','TITLE'];
+      if(blacklist.includes(tag)){ return true; }
+    }
+    if(parent.isContentEditable){ return true; }
+    if(parent.closest && parent.closest('.a11y-letter-highlight')){ return true; }
+    return false;
+  }
+
+  function applyDyslexiaHighlights(){
+    clearDyslexiaHighlights();
+    if(!dyslexiaActive){ return; }
+    const letter = sanitizeDyslexiaLetter(dyslexiaSettings.letter || '');
+    if(!letter){ return; }
+    const root = document.body;
+    if(!root){ return; }
+    const baseLetter = letter.toLocaleLowerCase();
+    const normalizedLetter = stripDyslexiaAccents(letter).toLocaleLowerCase();
+    const accentSensitive = !!dyslexiaSettings.accentSensitive;
+    const color = dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node){
+        return shouldSkipDyslexiaNode(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const replacements = [];
+    while(walker.nextNode()){
+      const node = walker.currentNode;
+      if(!node || !node.nodeValue){ continue; }
+      const fragments = buildDyslexiaFragments(node.nodeValue, baseLetter, normalizedLetter, accentSensitive, color);
+      if(!fragments || !fragments.length){ continue; }
+      const fragment = document.createDocumentFragment();
+      fragments.forEach(part => fragment.appendChild(part));
+      const parent = node.parentNode;
+      if(parent){
+        replacements.push({ parent, node, fragment });
+      }
+    }
+    replacements.forEach(item => {
+      if(!item.parent.isConnected){ return; }
+      item.parent.replaceChild(item.fragment, item.node);
+      if(item.parent.normalize){ item.parent.normalize(); }
+    });
+  }
+
+  function updateDyslexiaHighlightColors(){
+    const color = dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR;
+    document.querySelectorAll('.a11y-letter-highlight').forEach(span => {
+      span.style.setProperty('--a11y-dyslexie-color', color);
+      span.style.backgroundColor = color;
+      span.style.boxShadow = `0 0 0 2px ${color}`;
+    });
+  }
+
+  function setDyslexiaLetter(value){
+    const sanitized = sanitizeDyslexiaLetter(value);
+    const changed = dyslexiaSettings.letter !== sanitized;
+    dyslexiaSettings.letter = sanitized;
+    if(changed){ persistDyslexiaSettings(); }
+    clearDyslexiaHighlights();
+    if(dyslexiaActive && sanitized){
+      applyDyslexiaHighlights();
+    }
+    syncDyslexiaInstances();
+  }
+
+  function setDyslexiaAccentSensitive(value){
+    const next = !!value;
+    const changed = !!dyslexiaSettings.accentSensitive !== next;
+    dyslexiaSettings.accentSensitive = next;
+    if(changed){ persistDyslexiaSettings(); }
+    if(dyslexiaActive && dyslexiaSettings.letter){
+      applyDyslexiaHighlights();
+    }
+    syncDyslexiaInstances();
+  }
+
+  function setDyslexiaColor(value){
+    const normalized = normalizeDyslexiaColor(value);
+    const changed = dyslexiaSettings.color !== normalized;
+    dyslexiaSettings.color = normalized;
+    if(changed){ persistDyslexiaSettings(); }
+    updateDyslexiaHighlightColors();
+    syncDyslexiaInstances();
+  }
+
+  function handleDyslexiaLetterInput(value){
+    setDyslexiaLetter(value);
+  }
+
+  function handleDyslexiaColorInput(value){
+    setDyslexiaColor(value);
+  }
+
+  function handleDyslexiaAccentInput(checked){
+    setDyslexiaAccentSensitive(checked);
+  }
+
+  function setDyslexiaActive(active){
+    const next = !!active;
+    if(dyslexiaActive === next){
+      if(!next){ clearDyslexiaHighlights(); }
+      syncDyslexiaInstances();
+      return;
+    }
+    dyslexiaActive = next;
+    if(dyslexiaActive){
+      applyDyslexiaHighlights();
+      updateDyslexiaHighlightColors();
+    } else {
+      clearDyslexiaHighlights();
+    }
+    syncDyslexiaInstances();
+  }
+
+  function createDyslexiaCard(feature){
+    if(!feature || typeof feature.slug !== 'string' || !feature.slug){ return null; }
+
+    const article = document.createElement('article');
+    article.className = 'a11y-card a11y-card--dyslexie';
+    article.setAttribute('data-role', 'feature-card');
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.setAttribute('data-role', 'feature-meta');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = feature.label || '';
+    meta.appendChild(labelEl);
+
+    if(feature.hint){
+      const hintEl = document.createElement('span');
+      hintEl.className = 'hint';
+      hintEl.textContent = feature.hint;
+      meta.appendChild(hintEl);
+    }
+
+    const header = document.createElement('div');
+    header.className = 'a11y-dyslexie__header';
+    header.appendChild(meta);
+
+    const switchEl = buildSwitch(feature.slug, feature.aria_label || feature.label || '');
+    if(switchEl){
+      switchEl.classList.add('a11y-dyslexie__switch');
+      header.appendChild(switchEl);
+    }
+
+    article.appendChild(header);
+
+    const controls = document.createElement('form');
+    controls.className = 'a11y-dyslexie__controls';
+    controls.setAttribute('data-role', 'dyslexie-controls');
+    controls.addEventListener('submit', event => { event.preventDefault(); });
+
+    const settings = feature.settings && typeof feature.settings === 'object' ? feature.settings : {};
+    const texts = {
+      letter_label: typeof settings.letter_label === 'string' ? settings.letter_label : '',
+      letter_placeholder: typeof settings.letter_placeholder === 'string' ? settings.letter_placeholder : '',
+      color_label: typeof settings.color_label === 'string' ? settings.color_label : '',
+      accent_label: typeof settings.accent_label === 'string' ? settings.accent_label : '',
+      no_letter_warning: typeof settings.no_letter_warning === 'string' ? settings.no_letter_warning : '',
+    };
+
+    const baseId = `a11y-dyslexie-${++dyslexiaIdCounter}`;
+
+    const letterField = document.createElement('div');
+    letterField.className = 'a11y-dyslexie__field';
+    const letterLabel = document.createElement('label');
+    const letterId = `${baseId}-letter`;
+    letterLabel.setAttribute('for', letterId);
+    letterLabel.textContent = texts.letter_label || '';
+    const letterInput = document.createElement('input');
+    letterInput.type = 'text';
+    letterInput.id = letterId;
+    letterInput.className = 'a11y-dyslexie__input';
+    letterInput.autocomplete = 'off';
+    letterInput.inputMode = 'text';
+    letterInput.maxLength = 2;
+    letterInput.setAttribute('aria-describedby', `${baseId}-message`);
+    letterField.appendChild(letterLabel);
+    letterField.appendChild(letterInput);
+    controls.appendChild(letterField);
+
+    const colorField = document.createElement('div');
+    colorField.className = 'a11y-dyslexie__field';
+    const colorLabel = document.createElement('label');
+    const colorId = `${baseId}-color`;
+    colorLabel.setAttribute('for', colorId);
+    colorLabel.textContent = texts.color_label || '';
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.id = colorId;
+    colorInput.className = 'a11y-dyslexie__input a11y-dyslexie__input--color';
+    colorField.appendChild(colorLabel);
+    colorField.appendChild(colorInput);
+    controls.appendChild(colorField);
+
+    const accentField = document.createElement('div');
+    accentField.className = 'a11y-dyslexie__field a11y-dyslexie__field--checkbox';
+    const accentLabel = document.createElement('label');
+    accentLabel.className = 'a11y-dyslexie__checkbox';
+    const accentInput = document.createElement('input');
+    accentInput.type = 'checkbox';
+    accentInput.id = `${baseId}-accent`;
+    accentInput.className = 'a11y-dyslexie__checkbox-input';
+    const accentText = document.createElement('span');
+    accentText.setAttribute('data-role', 'dyslexie-accent-label');
+    accentText.textContent = texts.accent_label || '';
+    accentLabel.appendChild(accentInput);
+    accentLabel.appendChild(accentText);
+    accentField.appendChild(accentLabel);
+    controls.appendChild(accentField);
+
+    const message = document.createElement('p');
+    message.className = 'a11y-dyslexie__message';
+    message.id = `${baseId}-message`;
+    message.hidden = true;
+    if(texts.no_letter_warning){
+      message.textContent = texts.no_letter_warning;
+    }
+    controls.appendChild(message);
+
+    article.appendChild(controls);
+
+    const instance = {
+      article,
+      controls,
+      letterInput,
+      colorInput,
+      accentInput,
+      message,
+      settings: texts,
+      wasConnected: false,
+    };
+
+    dyslexiaInstances.add(instance);
+    syncDyslexiaInstances();
+
+    letterInput.addEventListener('input', () => handleDyslexiaLetterInput(letterInput.value));
+    letterInput.addEventListener('change', () => handleDyslexiaLetterInput(letterInput.value));
+    colorInput.addEventListener('input', () => handleDyslexiaColorInput(colorInput.value));
+    colorInput.addEventListener('change', () => handleDyslexiaColorInput(colorInput.value));
+    accentInput.addEventListener('change', () => handleDyslexiaAccentInput(accentInput.checked));
+
+    const markConnection = () => {
+      if(instance.article && instance.article.isConnected){
+        instance.wasConnected = true;
+      }
+    };
+    if(typeof requestAnimationFrame === 'function'){
+      requestAnimationFrame(markConnection);
+    } else {
+      setTimeout(markConnection, 0);
+    }
+
+    return article;
+  }
+
+  function createCustomFeature(feature){
+    const template = typeof feature.template === 'string' ? feature.template : '';
+    if(template === 'dyslexie-highlighter'){
+      return createDyslexiaCard(feature);
+    }
+    return createFeaturePlaceholder(feature);
+  }
+
   function normalizeString(value){
     if(typeof value !== 'string'){ return ''; }
     const normalized = typeof value.normalize === 'function' ? value.normalize('NFD') : value;
@@ -477,7 +939,7 @@
             instance = createFeatureGroup(subset);
           }
         } else if(featureMatches){
-          instance = createFeaturePlaceholder(feature);
+          instance = createCustomFeature(feature);
         }
         if(instance){
           annotateSearchInstance(instance, sectionTitle);
@@ -523,6 +985,7 @@
     if(searchEmpty){ searchEmpty.hidden = true; }
     if(!keepInput && searchInput){ searchInput.value = ''; }
     pruneDetachedFeatureInputs();
+    pruneDyslexiaInstances();
     const sectionsToRefresh = Array.from(renderedSections);
     sectionsToRefresh.forEach(sectionId => renderSection(sectionId));
     searchQuery = '';
@@ -577,7 +1040,12 @@
         if(typeof feature.slug !== 'string' || !feature.slug){
           return;
         }
-        instance = createFeaturePlaceholder(feature);
+        const template = typeof feature.template === 'string' ? feature.template : '';
+        if(template){
+          instance = createCustomFeature(feature);
+        } else {
+          instance = createFeaturePlaceholder(feature);
+        }
       }
 
       if(instance){
@@ -810,6 +1278,10 @@
   }
 
   // ---------- Wiring ----------
+  A11yAPI.registerFeature(DYSLEXIA_SLUG, on => {
+    setDyslexiaActive(on);
+  });
+
   applyPanelSide(loadPanelSide());
   applyStoredState();
   setupSectionNavigation();
