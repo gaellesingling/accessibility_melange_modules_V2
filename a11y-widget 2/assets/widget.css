@@ -380,6 +380,13 @@
   cursor: pointer;
   transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
 }
+.a11y-buttons__theme-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(214, 30, 91, 0.35);
+}
+.a11y-buttons__theme-button:focus:not(:focus-visible) {
+  box-shadow: none;
+}
 .a11y-buttons__theme-button:focus-visible {
   outline: none;
   box-shadow: 0 0 0 3px rgba(214, 30, 91, 0.35);
