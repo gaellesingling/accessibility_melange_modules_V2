@@ -88,6 +88,31 @@
   let dyslexiaSettings = loadDyslexiaSettings();
   let dyslexiaActive = false;
 
+  const CURSOR_SLUG = 'moteur-curseur';
+  const CURSOR_SETTINGS_KEY = 'a11y-widget-cursor-settings:v1';
+  const CURSOR_BASE_SIZE = 24;
+  const CURSOR_SIZE_MIN = 1;
+  const CURSOR_SIZE_MAX = 2;
+  const CURSOR_SIZE_STEP = 0.1;
+  const CURSOR_COLORS = {
+    white: { label: 'Blanc', fill: '#ffffff', stroke: '#202124' },
+    black: { label: 'Noir', fill: '#202124', stroke: '#ffffff' },
+  };
+  const CURSOR_ARROW_HOTSPOT = [4, 0];
+  const CURSOR_POINTER_HOTSPOT = [12, 12];
+
+  function buildCursorArrow({ fill, stroke, size }){
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M4.2,3.8l15,10.2l-7.1,1.5l-3.3,7.4L4.2,3.8z"/></svg>`;
+  }
+
+  function buildCursorPointer({ fill, stroke, size }){
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M9.6,22.2c-0.4,0.1-0.9-0.1-1-0.5l-1.3-4.2H4.8c-1.8,0-2.5-1.1-1.6-2.5L9,2.2c0.7-1.1,2-1.1,2.8,0l5.8,12.8c0.9,1.4,0.2,2.5-1.6,2.5h-2.5l-1.3,4.2C10.1,22.1,9.8,22.3,9.6,22.2z"/></svg>`;
+  }
+  const cursorInstances = new Set();
+  let cursorSettings = loadCursorSettings();
+  let cursorActive = false;
+  let cursorStyleElement = null;
+
   const featureInputs = new Map();
   const renderedSections = new Set();
   let featureState = loadStoredState();
@@ -434,6 +459,234 @@
       digits = digits.split('').map(ch => ch + ch).join('');
     }
     return ('#' + digits).toLowerCase();
+  }
+
+  function getDefaultCursorSettings(){
+    return { size: 1, color: 'black' };
+  }
+
+  function clampCursorSize(value){
+    const numeric = typeof value === 'number' ? value : parseFloat(value);
+    const fallback = getDefaultCursorSettings().size;
+    if(!isFinite(numeric)){ return fallback; }
+    return Math.min(CURSOR_SIZE_MAX, Math.max(CURSOR_SIZE_MIN, numeric));
+  }
+
+  function normalizeCursorColor(value){
+    if(typeof value !== 'string'){ return getDefaultCursorSettings().color; }
+    const key = value.toLowerCase();
+    return Object.prototype.hasOwnProperty.call(CURSOR_COLORS, key) ? key : getDefaultCursorSettings().color;
+  }
+
+  function loadCursorSettings(){
+    const defaults = getDefaultCursorSettings();
+    try {
+      const raw = localStorage.getItem(CURSOR_SETTINGS_KEY);
+      if(!raw){ return Object.assign({}, defaults); }
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
+      const size = clampCursorSize(parsed.size);
+      const color = normalizeCursorColor(parsed.color);
+      return { size, color };
+    } catch(err){
+      return Object.assign({}, defaults);
+    }
+  }
+
+  function persistCursorSettings(){
+    const payload = {
+      size: clampCursorSize(cursorSettings.size),
+      color: normalizeCursorColor(cursorSettings.color),
+    };
+    try { localStorage.setItem(CURSOR_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
+  }
+
+  function ensureCursorStyleElement(){
+    if(cursorStyleElement && cursorStyleElement.isConnected){
+      return cursorStyleElement;
+    }
+    const styleEl = cursorStyleElement || document.createElement('style');
+    styleEl.setAttribute('data-role', 'a11y-cursor-styles');
+    document.head.appendChild(styleEl);
+    cursorStyleElement = styleEl;
+    return cursorStyleElement;
+  }
+
+  const CURSOR_CLICKABLE_SELECTORS = [
+    'a',
+    'button',
+    '[role="button"]',
+    'input[type="button"]',
+    'input[type="submit"]',
+    'input[type="reset"]',
+    'input[type="checkbox"]',
+    'input[type="radio"]',
+    'input[type="range"]',
+    'select',
+    'summary',
+    '[contenteditable="true"]',
+    '[contenteditable=""]',
+    '[contenteditable]'
+  ].join(', ');
+
+  function getCursorPayload(settings){
+    const colorKey = normalizeCursorColor(settings.color);
+    const sizeMultiplier = clampCursorSize(settings.size);
+    const color = CURSOR_COLORS[colorKey] || CURSOR_COLORS.black;
+    const pixelSize = Math.round(CURSOR_BASE_SIZE * sizeMultiplier);
+    return { colorKey, color, pixelSize, sizeMultiplier };
+  }
+
+  function buildCursorRule(svgBuilder, hotspot, payload){
+    const svg = svgBuilder({
+      fill: payload.color.fill,
+      stroke: payload.color.stroke,
+      size: payload.pixelSize,
+    });
+    const [x, y] = Array.isArray(hotspot) ? hotspot : [12, 12];
+    return `url('data:image/svg+xml;utf8,${encodeURIComponent(svg)}') ${x} ${y}`;
+  }
+
+  function buildCursorCss(settings){
+    const payload = getCursorPayload(settings);
+    const defaultRule = buildCursorRule(buildCursorArrow, CURSOR_ARROW_HOTSPOT, payload);
+    const interactiveRule = buildCursorRule(buildCursorPointer, CURSOR_POINTER_HOTSPOT, payload);
+    if(payload.sizeMultiplier === 1 && payload.colorKey === 'black'){
+      return '';
+    }
+    return `
+html[data-a11yMoteurCurseur="on"] {
+  cursor: ${defaultRule}, auto !important;
+}
+html[data-a11yMoteurCurseur="on"] body,
+html[data-a11yMoteurCurseur="on"] body * {
+  cursor: inherit !important;
+}
+html[data-a11yMoteurCurseur="on"] body ${CURSOR_CLICKABLE_SELECTORS},
+html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider,
+html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider::-webkit-slider-thumb,
+html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider::-moz-range-thumb,
+html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider::-moz-range-track,
+html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
+  cursor: ${interactiveRule}, pointer !important;
+}
+`; }
+
+  function updateCursorStyles(){
+    if(!cursorActive){
+      if(cursorStyleElement){ cursorStyleElement.textContent = ''; }
+      return;
+    }
+    const css = buildCursorCss(cursorSettings);
+    if(!css){
+      if(cursorStyleElement){ cursorStyleElement.textContent = ''; }
+      return;
+    }
+    const styleEl = ensureCursorStyleElement();
+    styleEl.textContent = css;
+  }
+
+  let cursorIdCounter = 0;
+
+  function pruneCursorInstances(){
+    cursorInstances.forEach(instance => {
+      if(!instance){
+        cursorInstances.delete(instance);
+        return;
+      }
+      if(instance.wasConnected && (!instance.article || !instance.article.isConnected)){
+        cursorInstances.delete(instance);
+      }
+    });
+  }
+
+  function updateCursorInstanceUI(instance){
+    if(!instance){ return; }
+    const { article, controls, sizeSlider, sizeValue, colorInputs, colorOptions } = instance;
+    const active = cursorActive;
+    if(article){
+      if(article.isConnected){ instance.wasConnected = true; }
+      article.classList.toggle('is-disabled', !active);
+    }
+    if(controls){
+      controls.classList.toggle('is-disabled', !active);
+      if(!active){ controls.setAttribute('aria-disabled', 'true'); }
+      else { controls.removeAttribute('aria-disabled'); }
+    }
+    if(sizeSlider){
+      sizeSlider.disabled = !active;
+      setInputValue(sizeSlider, String(clampCursorSize(cursorSettings.size)));
+    }
+    if(sizeValue){
+      const formatted = clampCursorSize(cursorSettings.size).toFixed(1).replace('.', ',');
+      sizeValue.textContent = `x${formatted}`;
+    }
+    const currentColor = normalizeCursorColor(cursorSettings.color);
+    if(Array.isArray(colorInputs)){
+      colorInputs.forEach((input, index) => {
+        if(!input){ return; }
+        const isSelected = input.value === currentColor;
+        input.disabled = !active;
+        setCheckboxState(input, isSelected);
+        const label = Array.isArray(colorOptions) ? colorOptions[index] : null;
+        if(label){
+          label.classList.toggle('is-selected', isSelected);
+        }
+      });
+    }
+  }
+
+  function syncCursorInstances(){
+    pruneCursorInstances();
+    cursorInstances.forEach(instance => updateCursorInstanceUI(instance));
+  }
+
+  function setCursorSize(value, options = {}){
+    const next = clampCursorSize(value);
+    const changed = clampCursorSize(cursorSettings.size) !== next;
+    cursorSettings.size = next;
+    if(changed || options.force){
+      updateCursorStyles();
+      syncCursorInstances();
+      if(options.persist !== false){ persistCursorSettings(); }
+    } else if(options.syncOnly){
+      syncCursorInstances();
+    }
+  }
+
+  function setCursorColor(value, options = {}){
+    const next = normalizeCursorColor(value);
+    const changed = normalizeCursorColor(cursorSettings.color) !== next;
+    cursorSettings.color = next;
+    if(changed || options.force){
+      updateCursorStyles();
+      syncCursorInstances();
+      if(options.persist !== false){ persistCursorSettings(); }
+    } else if(options.syncOnly){
+      syncCursorInstances();
+    }
+  }
+
+  function resetCursorSettings(){
+    cursorSettings = getDefaultCursorSettings();
+    updateCursorStyles();
+    syncCursorInstances();
+  }
+
+  function setCursorActive(value){
+    const next = !!value;
+    if(cursorActive === next){
+      if(next){ updateCursorStyles(); }
+      syncCursorInstances();
+      return;
+    }
+    cursorActive = next;
+    if(cursorActive){
+      updateCursorStyles();
+    } else if(cursorStyleElement){
+      cursorStyleElement.textContent = '';
+    }
+    syncCursorInstances();
   }
 
   function loadDyslexiaSettings(){
@@ -876,10 +1129,177 @@
     return article;
   }
 
+  function createCursorCard(feature){
+    if(!feature || typeof feature.slug !== 'string' || !feature.slug){ return null; }
+
+    const article = document.createElement('article');
+    article.className = 'a11y-card a11y-card--cursor';
+    article.setAttribute('data-role', 'feature-card');
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.setAttribute('data-role', 'feature-meta');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = feature.label || '';
+    meta.appendChild(labelEl);
+
+    if(feature.hint){
+      const hintEl = document.createElement('span');
+      hintEl.className = 'hint';
+      hintEl.textContent = feature.hint;
+      meta.appendChild(hintEl);
+    }
+
+    const header = document.createElement('div');
+    header.className = 'a11y-cursor__header';
+    header.appendChild(meta);
+
+    const switchEl = buildSwitch(feature.slug, feature.aria_label || feature.label || '');
+    if(switchEl){
+      switchEl.classList.add('a11y-cursor__switch');
+      header.appendChild(switchEl);
+    }
+
+    article.appendChild(header);
+
+    const controls = document.createElement('form');
+    controls.className = 'a11y-cursor__controls';
+    controls.setAttribute('data-role', 'cursor-controls');
+    controls.addEventListener('submit', event => { event.preventDefault(); });
+
+    const settings = feature.settings && typeof feature.settings === 'object' ? feature.settings : {};
+    const texts = {
+      size_label: typeof settings.size_label === 'string' ? settings.size_label : '',
+      size_help: typeof settings.size_help === 'string' ? settings.size_help : '',
+      color_label: typeof settings.color_label === 'string' ? settings.color_label : '',
+      color_help: typeof settings.color_help === 'string' ? settings.color_help : '',
+    };
+
+    const baseId = `a11y-cursor-${++cursorIdCounter}`;
+
+    const sizeField = document.createElement('div');
+    sizeField.className = 'a11y-cursor__field';
+    const sizeLabel = document.createElement('label');
+    sizeLabel.setAttribute('for', `${baseId}-size`);
+    sizeLabel.className = 'a11y-cursor__label';
+    sizeLabel.textContent = texts.size_label || '';
+    sizeLabel.appendChild(document.createTextNode(' '));
+    const sizeValue = document.createElement('span');
+    sizeValue.className = 'a11y-cursor__value';
+    sizeLabel.appendChild(sizeValue);
+    sizeField.appendChild(sizeLabel);
+
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.id = `${baseId}-size`;
+    sizeSlider.className = 'a11y-cursor__slider';
+    sizeSlider.min = String(CURSOR_SIZE_MIN);
+    sizeSlider.max = String(CURSOR_SIZE_MAX);
+    sizeSlider.step = String(CURSOR_SIZE_STEP);
+    sizeSlider.value = String(clampCursorSize(cursorSettings.size));
+    sizeField.appendChild(sizeSlider);
+
+    if(texts.size_help){
+      const sizeHelp = document.createElement('p');
+      sizeHelp.className = 'a11y-cursor__help';
+      sizeHelp.textContent = texts.size_help;
+      sizeField.appendChild(sizeHelp);
+    }
+
+    controls.appendChild(sizeField);
+
+    const colorField = document.createElement('fieldset');
+    colorField.className = 'a11y-cursor__field';
+    const colorLegend = document.createElement('legend');
+    colorLegend.className = 'a11y-cursor__label';
+    colorLegend.textContent = texts.color_label || '';
+    colorField.appendChild(colorLegend);
+
+    const colorChoices = document.createElement('div');
+    colorChoices.className = 'a11y-cursor__choices a11y-cursor__choices--colors';
+    const colorInputs = [];
+    const colorOptions = [];
+    Object.keys(CURSOR_COLORS).forEach(colorKey => {
+      const colorData = CURSOR_COLORS[colorKey];
+      const colorId = `${baseId}-color-${colorKey}`;
+      const optionLabel = document.createElement('label');
+      optionLabel.className = 'a11y-cursor__option a11y-cursor__option--color';
+      optionLabel.setAttribute('for', colorId);
+      optionLabel.style.setProperty('--a11y-cursor-option-color', colorData ? colorData.fill : '#000000');
+      optionLabel.style.setProperty('--a11y-cursor-option-stroke', colorData ? colorData.stroke : '#ffffff');
+      const radio = document.createElement('input');
+      radio.type = 'radio';
+      radio.className = 'a11y-cursor__radio';
+      radio.name = `${baseId}-color`;
+      radio.id = colorId;
+      radio.value = colorKey;
+      const swatch = document.createElement('span');
+      swatch.className = 'a11y-cursor__swatch';
+      const text = document.createElement('span');
+      text.className = 'a11y-cursor__option-text';
+      text.textContent = colorData && colorData.label ? colorData.label : colorKey;
+      optionLabel.appendChild(radio);
+      optionLabel.appendChild(swatch);
+      optionLabel.appendChild(text);
+      colorChoices.appendChild(optionLabel);
+      colorInputs.push(radio);
+      colorOptions.push(optionLabel);
+    });
+    colorField.appendChild(colorChoices);
+
+    if(texts.color_help){
+      const colorHelp = document.createElement('p');
+      colorHelp.className = 'a11y-cursor__help';
+      colorHelp.textContent = texts.color_help;
+      colorField.appendChild(colorHelp);
+    }
+
+    controls.appendChild(colorField);
+
+    article.appendChild(controls);
+
+    const instance = {
+      article,
+      controls,
+      sizeSlider,
+      sizeValue,
+      colorInputs,
+      colorOptions,
+      wasConnected: false,
+    };
+
+    cursorInstances.add(instance);
+    syncCursorInstances();
+
+    sizeSlider.addEventListener('input', () => setCursorSize(sizeSlider.value, { persist: false }));
+    sizeSlider.addEventListener('change', () => setCursorSize(sizeSlider.value, { force: true }));
+    colorInputs.forEach(input => {
+      input.addEventListener('change', () => { if(input.checked){ setCursorColor(input.value); } });
+    });
+
+    const markConnection = () => {
+      if(instance.article && instance.article.isConnected){
+        instance.wasConnected = true;
+      }
+    };
+    if(typeof requestAnimationFrame === 'function'){
+      requestAnimationFrame(markConnection);
+    } else {
+      setTimeout(markConnection, 0);
+    }
+
+    return article;
+  }
+
   function createCustomFeature(feature){
     const template = typeof feature.template === 'string' ? feature.template : '';
     if(template === 'dyslexie-highlighter'){
       return createDyslexiaCard(feature);
+    }
+    if(template === 'cursor-settings'){
+      return createCursorCard(feature);
     }
     return createFeaturePlaceholder(feature);
   }
@@ -1001,6 +1421,7 @@
     if(!keepInput && searchInput){ searchInput.value = ''; }
     pruneDetachedFeatureInputs();
     pruneDyslexiaInstances();
+    pruneCursorInstances();
     const sectionsToRefresh = Array.from(renderedSections);
     sectionsToRefresh.forEach(sectionId => renderSection(sectionId));
     searchQuery = '';
@@ -1297,6 +1718,11 @@
     setDyslexiaActive(on);
   });
 
+  A11yAPI.registerFeature(CURSOR_SLUG, on => {
+    if(on){ ensureCursorStyleElement(); }
+    setCursorActive(on);
+  });
+
   applyPanelSide(loadPanelSide());
   applyStoredState();
   setupSectionNavigation();
@@ -1366,11 +1792,14 @@
       try { localStorage.removeItem(STORAGE_KEY); } catch(err){}
       try { localStorage.removeItem(LAUNCHER_POS_KEY); } catch(err){}
       try { localStorage.removeItem(PANEL_SIDE_KEY); } catch(err){}
+      try { localStorage.removeItem(CURSOR_SETTINGS_KEY); } catch(err){}
       document.documentElement.style.removeProperty('--a11y-launcher-x');
       document.documentElement.style.removeProperty('--a11y-launcher-y');
       launcherLastPos = null;
       hasCustomLauncherPosition = false;
       applyPanelSide('right');
+      resetCursorSettings();
+      setCursorActive(false);
     });
   }
   restoreLauncherPosition();

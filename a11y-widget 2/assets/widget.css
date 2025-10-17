@@ -293,6 +293,118 @@
 .a11y-card--dyslexie.is-disabled {
   opacity: .85;
 }
+.a11y-card--cursor {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.a11y-card--cursor.is-disabled {
+  opacity: .85;
+}
+.a11y-cursor__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  row-gap: 12px;
+}
+.a11y-cursor__switch {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+.a11y-cursor__controls {
+  display: grid;
+  gap: 14px;
+  align-items: start;
+}
+.a11y-cursor__controls.is-disabled {
+  opacity: .6;
+  pointer-events: none;
+}
+.a11y-cursor__field {
+  margin: 0;
+  border: 1px solid var(--a11y-border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: var(--a11y-surface-elev);
+  display: grid;
+  gap: 10px;
+}
+.a11y-cursor__field legend {
+  padding: 0;
+}
+.a11y-cursor__label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: .95rem;
+  font-weight: 600;
+}
+.a11y-cursor__value {
+  font-size: .9rem;
+  font-weight: 600;
+  color: var(--a11y-primary);
+}
+.a11y-cursor__slider {
+  width: 100%;
+  accent-color: var(--a11y-primary);
+}
+.a11y-cursor__help {
+  margin: 0;
+  font-size: .85rem;
+  color: #555;
+}
+.a11y-cursor__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.a11y-cursor__choices--colors {
+  gap: 12px;
+}
+.a11y-cursor__option {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--a11y-border);
+  border-radius: 12px;
+  background: var(--a11y-surface);
+  cursor: pointer;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
+}
+.a11y-cursor__option.is-selected {
+  border-color: var(--a11y-primary);
+  box-shadow: 0 0 0 3px rgba(214, 30, 91, 0.2);
+  background: rgba(214, 30, 91, 0.08);
+}
+.a11y-cursor__radio {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  pointer-events: none;
+}
+.a11y-cursor__option-text {
+  font-size: .95rem;
+  font-weight: 500;
+}
+.a11y-cursor__option.is-selected .a11y-cursor__option-text {
+  font-weight: 700;
+}
+.a11y-cursor__option--color {
+  padding: 10px 14px;
+}
+.a11y-cursor__swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  background: var(--a11y-cursor-option-color, #000);
+  box-shadow: 0 0 0 2px var(--a11y-cursor-option-stroke, #fff);
+}
 .a11y-dyslexie__header {
   display: flex;
   flex-wrap: wrap;
