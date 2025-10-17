@@ -84,9 +84,34 @@
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
   const DYSLEXIA_SETTINGS_KEY = 'a11y-widget-dyslexie-settings:v1';
   const DYSLEXIA_DEFAULT_COLOR = '#ffeb3b';
+  const DYSLEXIA_FONT_SIZE_MIN = 14;
+  const DYSLEXIA_FONT_SIZE_MAX = 26;
+  const DYSLEXIA_FONT_SIZE_STEP = 1;
+  const DYSLEXIA_LINE_HEIGHT_MIN = 100;
+  const DYSLEXIA_LINE_HEIGHT_MAX = 250;
+  const DYSLEXIA_LINE_HEIGHT_STEP = 10;
+  const DYSLEXIA_TEXT_SELECTOR = 'body, body :where(p, span, a, li, label, button, input, select, textarea, blockquote, h1, h2, h3, h4, h5, h6)';
+  const DYSLEXIA_FONT_STACKS = {
+    default: 'inherit',
+    arial: '"Arial", "Helvetica Neue", Helvetica, sans-serif',
+    verdana: '"Verdana", Geneva, sans-serif',
+    trebuchet: '"Trebuchet MS", "Lucida Sans Unicode", "Lucida Grande", sans-serif',
+    comic: '"Comic Sans MS", "Comic Sans", cursive, sans-serif',
+  };
+  const DYSLEXIA_DEFAULTS = {
+    letter: '',
+    color: DYSLEXIA_DEFAULT_COLOR,
+    accentInclusive: false,
+    font: 'default',
+    fontSize: 16,
+    lineHeight: 150,
+    disableItalic: false,
+    disableBold: false,
+  };
   const dyslexiaInstances = new Set();
   let dyslexiaSettings = loadDyslexiaSettings();
   let dyslexiaActive = false;
+  let dyslexiaStyleElement = null;
 
   const CURSOR_SLUG = 'moteur-curseur';
   const CURSOR_SETTINGS_KEY = 'a11y-widget-cursor-settings:v1';
@@ -502,6 +527,66 @@
     return ('#' + digits).toLowerCase();
   }
 
+  function normalizeDyslexiaFont(value){
+    if(typeof value !== 'string'){ return DYSLEXIA_DEFAULTS.font; }
+    const key = value.trim().toLowerCase();
+    return Object.prototype.hasOwnProperty.call(DYSLEXIA_FONT_STACKS, key)
+      ? key
+      : DYSLEXIA_DEFAULTS.font;
+  }
+
+  function clampDyslexiaFontSize(value){
+    const numeric = typeof value === 'number' ? value : parseFloat(value);
+    if(!isFinite(numeric)){ return DYSLEXIA_DEFAULTS.fontSize; }
+    return Math.min(DYSLEXIA_FONT_SIZE_MAX, Math.max(DYSLEXIA_FONT_SIZE_MIN, Math.round(numeric)));
+  }
+
+  function clampDyslexiaLineHeight(value){
+    const numeric = typeof value === 'number' ? value : parseFloat(value);
+    if(!isFinite(numeric)){ return DYSLEXIA_DEFAULTS.lineHeight; }
+    return Math.min(DYSLEXIA_LINE_HEIGHT_MAX, Math.max(DYSLEXIA_LINE_HEIGHT_MIN, Math.round(numeric)));
+  }
+
+  function formatDyslexiaFontSize(value){
+    return `${clampDyslexiaFontSize(value)}px`;
+  }
+
+  function formatDyslexiaLineHeight(value){
+    return `${clampDyslexiaLineHeight(value)}%`;
+  }
+
+  function ensureDyslexiaStyleElement(){
+    if(dyslexiaStyleElement && dyslexiaStyleElement.parentNode){ return; }
+    dyslexiaStyleElement = document.createElement('style');
+    dyslexiaStyleElement.id = 'a11y-dyslexie-style';
+    document.head.appendChild(dyslexiaStyleElement);
+  }
+
+  function updateDyslexiaStyles(){
+    if(!dyslexiaActive){
+      if(dyslexiaStyleElement){ dyslexiaStyleElement.textContent = ''; }
+      return;
+    }
+    ensureDyslexiaStyleElement();
+    const size = clampDyslexiaFontSize(dyslexiaSettings.fontSize);
+    const lineHeight = clampDyslexiaLineHeight(dyslexiaSettings.lineHeight);
+    const fontKey = normalizeDyslexiaFont(dyslexiaSettings.font);
+    const fontStack = DYSLEXIA_FONT_STACKS[fontKey] || DYSLEXIA_FONT_STACKS[DYSLEXIA_DEFAULTS.font];
+    const rules = [];
+    rules.push(`body { font-size: ${size}px !important; }`);
+    rules.push(`${DYSLEXIA_TEXT_SELECTOR} { line-height: ${lineHeight}% !important; }`);
+    if(fontKey !== 'default'){
+      rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-family: ${fontStack} !important; }`);
+    }
+    if(dyslexiaSettings.disableItalic){
+      rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-style: normal !important; }`);
+    }
+    if(dyslexiaSettings.disableBold){
+      rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-weight: 400 !important; }`);
+    }
+    dyslexiaStyleElement.textContent = rules.join('\n');
+  }
+
   function getDefaultCursorSettings(){
     return { size: 1, color: 'black' };
   }
@@ -735,14 +820,19 @@ ${interactiveSelectors} {
   }
 
   function loadDyslexiaSettings(){
-    const defaults = { letter: '', color: DYSLEXIA_DEFAULT_COLOR, accentInclusive: false };
+    const defaults = Object.assign({}, DYSLEXIA_DEFAULTS);
     try {
       const raw = localStorage.getItem(DYSLEXIA_SETTINGS_KEY);
       if(!raw){ return Object.assign({}, defaults); }
       const parsed = JSON.parse(raw);
       if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
-      const letter = sanitizeDyslexiaLetter(typeof parsed.letter === 'string' ? parsed.letter : '');
-      const color = normalizeDyslexiaColor(typeof parsed.color === 'string' ? parsed.color : DYSLEXIA_DEFAULT_COLOR);
+      const result = Object.assign({}, defaults);
+      if(Object.prototype.hasOwnProperty.call(parsed, 'letter')){
+        result.letter = sanitizeDyslexiaLetter(typeof parsed.letter === 'string' ? parsed.letter : '');
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'color')){
+        result.color = normalizeDyslexiaColor(typeof parsed.color === 'string' ? parsed.color : DYSLEXIA_DEFAULT_COLOR);
+      }
       let accentInclusive = defaults.accentInclusive;
       const hasAccentInclusive = Object.prototype.hasOwnProperty.call(parsed, 'accentInclusive');
       if(hasAccentInclusive){
@@ -750,7 +840,22 @@ ${interactiveSelectors} {
       } else if(Object.prototype.hasOwnProperty.call(parsed, 'accentSensitive')) {
         accentInclusive = !parsed.accentSensitive;
       }
-      const result = { letter, color, accentInclusive };
+      result.accentInclusive = accentInclusive;
+      if(Object.prototype.hasOwnProperty.call(parsed, 'font')){
+        result.font = normalizeDyslexiaFont(parsed.font);
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'fontSize')){
+        result.fontSize = clampDyslexiaFontSize(parsed.fontSize);
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'lineHeight')){
+        result.lineHeight = clampDyslexiaLineHeight(parsed.lineHeight);
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'disableItalic')){
+        result.disableItalic = !!parsed.disableItalic;
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'disableBold')){
+        result.disableBold = !!parsed.disableBold;
+      }
       if(!hasAccentInclusive && Object.prototype.hasOwnProperty.call(parsed, 'accentSensitive')){
         try { localStorage.setItem(DYSLEXIA_SETTINGS_KEY, JSON.stringify(result)); } catch(err){ /* ignore */ }
       }
@@ -762,9 +867,14 @@ ${interactiveSelectors} {
 
   function persistDyslexiaSettings(){
     const payload = {
-      letter: dyslexiaSettings.letter || '',
-      color: dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR,
-      accentInclusive: !!dyslexiaSettings.accentInclusive
+      letter: sanitizeDyslexiaLetter(dyslexiaSettings.letter || ''),
+      color: normalizeDyslexiaColor(dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR),
+      accentInclusive: !!dyslexiaSettings.accentInclusive,
+      font: normalizeDyslexiaFont(dyslexiaSettings.font),
+      fontSize: clampDyslexiaFontSize(dyslexiaSettings.fontSize),
+      lineHeight: clampDyslexiaLineHeight(dyslexiaSettings.lineHeight),
+      disableItalic: !!dyslexiaSettings.disableItalic,
+      disableBold: !!dyslexiaSettings.disableBold,
     };
     try { localStorage.setItem(DYSLEXIA_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
   }
@@ -800,7 +910,23 @@ ${interactiveSelectors} {
 
   function updateDyslexiaInstanceUI(instance){
     if(!instance){ return; }
-    const { article, controls, letterInput, colorInput, accentInput, message, settings = {} } = instance;
+    const {
+      article,
+      controls,
+      letterInput,
+      colorInput,
+      accentInput,
+      message,
+      fontSelect,
+      sizeSlider,
+      sizeValue,
+      lineSlider,
+      lineValue,
+      italicInput,
+      boldInput,
+      resetButton,
+      settings = {},
+    } = instance;
     const active = dyslexiaActive;
     if(article){
       if(article.isConnected){ instance.wasConnected = true; }
@@ -832,6 +958,43 @@ ${interactiveSelectors} {
         const text = typeof settings.accent_label === 'string' ? settings.accent_label : '';
         if(text){ accentLabel.textContent = text; }
       }
+    }
+    if(fontSelect){
+      fontSelect.disabled = !active;
+      setInputValue(fontSelect, normalizeDyslexiaFont(dyslexiaSettings.font));
+      if(fontSelect.dataset.helpTarget){
+        const helpEl = document.getElementById(fontSelect.dataset.helpTarget);
+        if(helpEl){
+          const helpText = typeof settings.font_help === 'string' ? settings.font_help : '';
+          helpEl.textContent = helpText;
+          helpEl.hidden = !helpText;
+        }
+      }
+    }
+    if(sizeSlider){
+      sizeSlider.disabled = !active;
+      setInputValue(sizeSlider, String(clampDyslexiaFontSize(dyslexiaSettings.fontSize)));
+    }
+    if(sizeValue){
+      sizeValue.textContent = formatDyslexiaFontSize(dyslexiaSettings.fontSize);
+    }
+    if(lineSlider){
+      lineSlider.disabled = !active;
+      setInputValue(lineSlider, String(clampDyslexiaLineHeight(dyslexiaSettings.lineHeight)));
+    }
+    if(lineValue){
+      lineValue.textContent = formatDyslexiaLineHeight(dyslexiaSettings.lineHeight);
+    }
+    if(italicInput){
+      italicInput.disabled = !active;
+      setCheckboxState(italicInput, !!dyslexiaSettings.disableItalic);
+    }
+    if(boldInput){
+      boldInput.disabled = !active;
+      setCheckboxState(boldInput, !!dyslexiaSettings.disableBold);
+    }
+    if(resetButton){
+      resetButton.disabled = !active;
     }
     if(message){
       const warning = typeof settings.no_letter_warning === 'string' ? settings.no_letter_warning : '';
@@ -1001,6 +1164,82 @@ ${interactiveSelectors} {
     syncDyslexiaInstances();
   }
 
+  function setDyslexiaFont(value, options = {}){
+    const next = normalizeDyslexiaFont(value);
+    const changed = dyslexiaSettings.font !== next;
+    dyslexiaSettings.font = next;
+    if(changed || options.force){
+      updateDyslexiaStyles();
+      syncDyslexiaInstances();
+      if(options.persist !== false){ persistDyslexiaSettings(); }
+    } else if(options.syncOnly){
+      syncDyslexiaInstances();
+    }
+  }
+
+  function setDyslexiaFontSize(value, options = {}){
+    const next = clampDyslexiaFontSize(value);
+    const changed = clampDyslexiaFontSize(dyslexiaSettings.fontSize) !== next;
+    dyslexiaSettings.fontSize = next;
+    if(changed || options.force){
+      updateDyslexiaStyles();
+      syncDyslexiaInstances();
+      if(options.persist !== false){ persistDyslexiaSettings(); }
+    } else if(options.syncOnly){
+      syncDyslexiaInstances();
+    }
+  }
+
+  function setDyslexiaLineHeight(value, options = {}){
+    const next = clampDyslexiaLineHeight(value);
+    const changed = clampDyslexiaLineHeight(dyslexiaSettings.lineHeight) !== next;
+    dyslexiaSettings.lineHeight = next;
+    if(changed || options.force){
+      updateDyslexiaStyles();
+      syncDyslexiaInstances();
+      if(options.persist !== false){ persistDyslexiaSettings(); }
+    } else if(options.syncOnly){
+      syncDyslexiaInstances();
+    }
+  }
+
+  function setDyslexiaDisableItalic(value, options = {}){
+    const next = !!value;
+    const changed = !!dyslexiaSettings.disableItalic !== next;
+    dyslexiaSettings.disableItalic = next;
+    if(changed || options.force){
+      updateDyslexiaStyles();
+      syncDyslexiaInstances();
+      if(options.persist !== false){ persistDyslexiaSettings(); }
+    } else if(options.syncOnly){
+      syncDyslexiaInstances();
+    }
+  }
+
+  function setDyslexiaDisableBold(value, options = {}){
+    const next = !!value;
+    const changed = !!dyslexiaSettings.disableBold !== next;
+    dyslexiaSettings.disableBold = next;
+    if(changed || options.force){
+      updateDyslexiaStyles();
+      syncDyslexiaInstances();
+      if(options.persist !== false){ persistDyslexiaSettings(); }
+    } else if(options.syncOnly){
+      syncDyslexiaInstances();
+    }
+  }
+
+  function resetDyslexiaTypography(){
+    dyslexiaSettings.font = DYSLEXIA_DEFAULTS.font;
+    dyslexiaSettings.fontSize = DYSLEXIA_DEFAULTS.fontSize;
+    dyslexiaSettings.lineHeight = DYSLEXIA_DEFAULTS.lineHeight;
+    dyslexiaSettings.disableItalic = DYSLEXIA_DEFAULTS.disableItalic;
+    dyslexiaSettings.disableBold = DYSLEXIA_DEFAULTS.disableBold;
+    persistDyslexiaSettings();
+    updateDyslexiaStyles();
+    syncDyslexiaInstances();
+  }
+
   function handleDyslexiaLetterInput(value){
     setDyslexiaLetter(value);
   }
@@ -1013,10 +1252,39 @@ ${interactiveSelectors} {
     setDyslexiaAccentInclusive(checked);
   }
 
+  function handleDyslexiaFontInput(value){
+    setDyslexiaFont(value, { force: true });
+  }
+
+  function handleDyslexiaFontSizeInput(value){
+    setDyslexiaFontSize(value, { persist: false });
+  }
+
+  function handleDyslexiaFontSizeChange(value){
+    setDyslexiaFontSize(value, { force: true });
+  }
+
+  function handleDyslexiaLineHeightInput(value){
+    setDyslexiaLineHeight(value, { persist: false });
+  }
+
+  function handleDyslexiaLineHeightChange(value){
+    setDyslexiaLineHeight(value, { force: true });
+  }
+
+  function handleDyslexiaItalicToggle(checked){
+    setDyslexiaDisableItalic(checked, { force: true });
+  }
+
+  function handleDyslexiaBoldToggle(checked){
+    setDyslexiaDisableBold(checked, { force: true });
+  }
+
   function setDyslexiaActive(active){
     const next = !!active;
     if(dyslexiaActive === next){
       if(!next){ clearDyslexiaHighlights(); }
+      updateDyslexiaStyles();
       syncDyslexiaInstances();
       return;
     }
@@ -1024,8 +1292,10 @@ ${interactiveSelectors} {
     if(dyslexiaActive){
       applyDyslexiaHighlights();
       updateDyslexiaHighlightColors();
+      updateDyslexiaStyles();
     } else {
       clearDyslexiaHighlights();
+      updateDyslexiaStyles();
     }
     syncDyslexiaInstances();
   }
@@ -1077,6 +1347,22 @@ ${interactiveSelectors} {
       color_label: typeof settings.color_label === 'string' ? settings.color_label : '',
       accent_label: typeof settings.accent_label === 'string' ? settings.accent_label : '',
       no_letter_warning: typeof settings.no_letter_warning === 'string' ? settings.no_letter_warning : '',
+      font_label: typeof settings.font_label === 'string' ? settings.font_label : '',
+      font_help: typeof settings.font_help === 'string' ? settings.font_help : '',
+      font_option_default: typeof settings.font_option_default === 'string' ? settings.font_option_default : '',
+      font_option_arial: typeof settings.font_option_arial === 'string' ? settings.font_option_arial : '',
+      font_option_verdana: typeof settings.font_option_verdana === 'string' ? settings.font_option_verdana : '',
+      font_option_trebuchet: typeof settings.font_option_trebuchet === 'string' ? settings.font_option_trebuchet : '',
+      font_option_comic: typeof settings.font_option_comic === 'string' ? settings.font_option_comic : '',
+      size_label: typeof settings.size_label === 'string' ? settings.size_label : '',
+      size_help: typeof settings.size_help === 'string' ? settings.size_help : '',
+      line_label: typeof settings.line_label === 'string' ? settings.line_label : '',
+      line_help: typeof settings.line_help === 'string' ? settings.line_help : '',
+      styles_label: typeof settings.styles_label === 'string' ? settings.styles_label : '',
+      styles_help: typeof settings.styles_help === 'string' ? settings.styles_help : '',
+      disable_italic_label: typeof settings.disable_italic_label === 'string' ? settings.disable_italic_label : '',
+      disable_bold_label: typeof settings.disable_bold_label === 'string' ? settings.disable_bold_label : '',
+      reset_label: typeof settings.reset_label === 'string' ? settings.reset_label : '',
     };
 
     const baseId = `a11y-dyslexie-${++dyslexiaIdCounter}`;
@@ -1129,6 +1415,140 @@ ${interactiveSelectors} {
     accentField.appendChild(accentLabel);
     controls.appendChild(accentField);
 
+    const fontField = document.createElement('div');
+    fontField.className = 'a11y-dyslexie__field';
+    const fontLabel = document.createElement('label');
+    const fontId = `${baseId}-font`;
+    fontLabel.setAttribute('for', fontId);
+    fontLabel.textContent = texts.font_label || '';
+    const fontSelect = document.createElement('select');
+    fontSelect.id = fontId;
+    fontSelect.className = 'a11y-dyslexie__input a11y-dyslexie__input--select';
+    const fontOptions = [
+      { value: 'default', label: texts.font_option_default || 'Default' },
+      { value: 'arial', label: texts.font_option_arial || 'Arial' },
+      { value: 'verdana', label: texts.font_option_verdana || 'Verdana' },
+      { value: 'trebuchet', label: texts.font_option_trebuchet || 'Trebuchet MS' },
+      { value: 'comic', label: texts.font_option_comic || 'Comic Sans MS' },
+    ];
+    fontOptions.forEach(option => {
+      if(!option.label){ return; }
+      const opt = document.createElement('option');
+      opt.value = option.value;
+      opt.textContent = option.label;
+      fontSelect.appendChild(opt);
+    });
+    fontSelect.value = normalizeDyslexiaFont(dyslexiaSettings.font);
+    fontField.appendChild(fontLabel);
+    fontField.appendChild(fontSelect);
+    if(texts.font_help){
+      const fontHelp = document.createElement('p');
+      fontHelp.className = 'a11y-dyslexie__help';
+      fontHelp.id = `${baseId}-font-help`;
+      fontHelp.textContent = texts.font_help;
+      fontField.appendChild(fontHelp);
+      fontSelect.dataset.helpTarget = fontHelp.id;
+      fontSelect.setAttribute('aria-describedby', fontHelp.id);
+    }
+    controls.appendChild(fontField);
+
+    const sizeField = document.createElement('div');
+    sizeField.className = 'a11y-dyslexie__field a11y-dyslexie__field--range';
+    const sizeLabel = document.createElement('label');
+    const sizeId = `${baseId}-font-size`;
+    sizeLabel.setAttribute('for', sizeId);
+    sizeLabel.textContent = texts.size_label || '';
+    const sizeValue = document.createElement('span');
+    sizeValue.className = 'a11y-dyslexie__value';
+    sizeValue.textContent = formatDyslexiaFontSize(dyslexiaSettings.fontSize);
+    sizeLabel.appendChild(sizeValue);
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.id = sizeId;
+    sizeSlider.className = 'a11y-dyslexie__range';
+    sizeSlider.min = String(DYSLEXIA_FONT_SIZE_MIN);
+    sizeSlider.max = String(DYSLEXIA_FONT_SIZE_MAX);
+    sizeSlider.step = String(DYSLEXIA_FONT_SIZE_STEP);
+    sizeSlider.value = String(clampDyslexiaFontSize(dyslexiaSettings.fontSize));
+    sizeField.appendChild(sizeLabel);
+    sizeField.appendChild(sizeSlider);
+    if(texts.size_help){
+      const sizeHelp = document.createElement('p');
+      sizeHelp.className = 'a11y-dyslexie__help';
+      sizeHelp.textContent = texts.size_help;
+      sizeField.appendChild(sizeHelp);
+    }
+    controls.appendChild(sizeField);
+
+    const lineField = document.createElement('div');
+    lineField.className = 'a11y-dyslexie__field a11y-dyslexie__field--range';
+    const lineId = `${baseId}-line-height`;
+    const lineLabel = document.createElement('label');
+    lineLabel.setAttribute('for', lineId);
+    lineLabel.textContent = texts.line_label || '';
+    const lineValue = document.createElement('span');
+    lineValue.className = 'a11y-dyslexie__value';
+    lineValue.textContent = formatDyslexiaLineHeight(dyslexiaSettings.lineHeight);
+    lineLabel.appendChild(lineValue);
+    const lineSlider = document.createElement('input');
+    lineSlider.type = 'range';
+    lineSlider.id = lineId;
+    lineSlider.className = 'a11y-dyslexie__range';
+    lineSlider.min = String(DYSLEXIA_LINE_HEIGHT_MIN);
+    lineSlider.max = String(DYSLEXIA_LINE_HEIGHT_MAX);
+    lineSlider.step = String(DYSLEXIA_LINE_HEIGHT_STEP);
+    lineSlider.value = String(clampDyslexiaLineHeight(dyslexiaSettings.lineHeight));
+    lineField.appendChild(lineLabel);
+    lineField.appendChild(lineSlider);
+    if(texts.line_help){
+      const lineHelp = document.createElement('p');
+      lineHelp.className = 'a11y-dyslexie__help';
+      lineHelp.textContent = texts.line_help;
+      lineField.appendChild(lineHelp);
+    }
+    controls.appendChild(lineField);
+
+    const stylesField = document.createElement('fieldset');
+    stylesField.className = 'a11y-dyslexie__fieldset';
+    const stylesLegend = document.createElement('legend');
+    stylesLegend.className = 'a11y-dyslexie__legend';
+    stylesLegend.textContent = texts.styles_label || '';
+    stylesField.appendChild(stylesLegend);
+    if(texts.styles_help){
+      const stylesHelp = document.createElement('p');
+      stylesHelp.className = 'a11y-dyslexie__help';
+      stylesHelp.textContent = texts.styles_help;
+      stylesField.appendChild(stylesHelp);
+    }
+    const stylesOptions = document.createElement('div');
+    stylesOptions.className = 'a11y-dyslexie__style-options';
+    const italicLabel = document.createElement('label');
+    italicLabel.className = 'a11y-dyslexie__checkbox';
+    const italicInput = document.createElement('input');
+    italicInput.type = 'checkbox';
+    italicInput.id = `${baseId}-remove-italic`;
+    italicInput.className = 'a11y-dyslexie__checkbox-input';
+    const italicText = document.createElement('span');
+    italicText.textContent = texts.disable_italic_label || '';
+    italicLabel.appendChild(italicInput);
+    italicLabel.appendChild(italicText);
+    stylesOptions.appendChild(italicLabel);
+    const boldLabel = document.createElement('label');
+    boldLabel.className = 'a11y-dyslexie__checkbox';
+    const boldInput = document.createElement('input');
+    boldInput.type = 'checkbox';
+    boldInput.id = `${baseId}-remove-bold`;
+    boldInput.className = 'a11y-dyslexie__checkbox-input';
+    const boldText = document.createElement('span');
+    boldText.textContent = texts.disable_bold_label || '';
+    boldLabel.appendChild(boldInput);
+    boldLabel.appendChild(boldText);
+    stylesOptions.appendChild(boldLabel);
+    italicInput.checked = !!dyslexiaSettings.disableItalic;
+    boldInput.checked = !!dyslexiaSettings.disableBold;
+    stylesField.appendChild(stylesOptions);
+    controls.appendChild(stylesField);
+
     const message = document.createElement('p');
     message.className = 'a11y-dyslexie__message';
     message.id = `${baseId}-message`;
@@ -1138,6 +1558,17 @@ ${interactiveSelectors} {
     }
     controls.appendChild(message);
 
+    const actions = document.createElement('div');
+    actions.className = 'a11y-dyslexie__actions';
+    const resetButton = document.createElement('button');
+    resetButton.type = 'button';
+    resetButton.className = 'a11y-dyslexie__reset';
+    const resetText = texts.reset_label || 'Réinitialiser';
+    resetButton.textContent = resetText;
+    resetButton.setAttribute('aria-label', resetText);
+    actions.appendChild(resetButton);
+    controls.appendChild(actions);
+
     article.appendChild(controls);
 
     const instance = {
@@ -1146,6 +1577,14 @@ ${interactiveSelectors} {
       letterInput,
       colorInput,
       accentInput,
+      fontSelect,
+      sizeSlider,
+      sizeValue,
+      lineSlider,
+      lineValue,
+      italicInput,
+      boldInput,
+      resetButton,
       message,
       settings: texts,
       wasConnected: false,
@@ -1159,6 +1598,14 @@ ${interactiveSelectors} {
     colorInput.addEventListener('input', () => handleDyslexiaColorInput(colorInput.value));
     colorInput.addEventListener('change', () => handleDyslexiaColorInput(colorInput.value));
     accentInput.addEventListener('change', () => handleDyslexiaAccentInput(accentInput.checked));
+    fontSelect.addEventListener('change', () => handleDyslexiaFontInput(fontSelect.value));
+    sizeSlider.addEventListener('input', () => handleDyslexiaFontSizeInput(sizeSlider.value));
+    sizeSlider.addEventListener('change', () => handleDyslexiaFontSizeChange(sizeSlider.value));
+    lineSlider.addEventListener('input', () => handleDyslexiaLineHeightInput(lineSlider.value));
+    lineSlider.addEventListener('change', () => handleDyslexiaLineHeightChange(lineSlider.value));
+    italicInput.addEventListener('change', () => handleDyslexiaItalicToggle(italicInput.checked));
+    boldInput.addEventListener('change', () => handleDyslexiaBoldToggle(boldInput.checked));
+    resetButton.addEventListener('click', () => resetDyslexiaTypography());
 
     const markConnection = () => {
       if(instance.article && instance.article.isConnected){
