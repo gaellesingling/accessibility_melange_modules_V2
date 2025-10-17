@@ -295,8 +295,11 @@
 }
 .a11y-dyslexie__header {
   display: flex;
-  align-items: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
   gap: 16px;
+  row-gap: 12px;
 }
 .a11y-card--dyslexie .meta {
   flex: 1 1 auto;
@@ -308,10 +311,13 @@
 }
 .a11y-dyslexie__switch {
   margin-left: auto;
+  flex-shrink: 0;
 }
 .a11y-dyslexie__controls {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px 16px;
+  align-items: start;
 }
 .a11y-dyslexie__controls.is-disabled {
   opacity: .6;
@@ -344,6 +350,7 @@
 .a11y-dyslexie__field--checkbox {
   display: flex;
   align-items: center;
+  grid-column: 1 / -1;
 }
 .a11y-dyslexie__checkbox {
   display: inline-flex;
