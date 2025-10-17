@@ -90,7 +90,13 @@
   const DYSLEXIA_LINE_HEIGHT_MIN = 100;
   const DYSLEXIA_LINE_HEIGHT_MAX = 250;
   const DYSLEXIA_LINE_HEIGHT_STEP = 10;
-  const DYSLEXIA_TEXT_SELECTOR = 'body, body :where(p, span, a, li, label, button, input, select, textarea, blockquote, h1, h2, h3, h4, h5, h6)';
+  const DYSLEXIA_TEXT_ELEMENTS = [
+    'p', 'span', 'a', 'li', 'label', 'button', 'input', 'select', 'textarea', 'blockquote',
+    'strong', 'b', 'em', 'i', 'cite', 'dfn', 'mark', 'code', 'pre', 'small', 'sup', 'sub',
+    'td', 'th', 'dd', 'dt', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'
+  ];
+  const DYSLEXIA_TEXT_SELECTOR = `body, body :where(${DYSLEXIA_TEXT_ELEMENTS.join(', ')})`;
+  const DYSLEXIA_FONT_SIZE_SELECTOR = `html, ${DYSLEXIA_TEXT_SELECTOR}`;
   const DYSLEXIA_FONT_STACKS = {
     default: 'inherit',
     arial: '"Arial", "Helvetica Neue", Helvetica, sans-serif',
@@ -573,7 +579,7 @@
     const fontKey = normalizeDyslexiaFont(dyslexiaSettings.font);
     const fontStack = DYSLEXIA_FONT_STACKS[fontKey] || DYSLEXIA_FONT_STACKS[DYSLEXIA_DEFAULTS.font];
     const rules = [];
-    rules.push(`body { font-size: ${size}px !important; }`);
+    rules.push(`${DYSLEXIA_FONT_SIZE_SELECTOR} { font-size: ${size}px !important; }`);
     rules.push(`${DYSLEXIA_TEXT_SELECTOR} { line-height: ${lineHeight}% !important; }`);
     if(fontKey !== 'default'){
       rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-family: ${fontStack} !important; }`);
@@ -582,7 +588,7 @@
       rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-style: normal !important; }`);
     }
     if(dyslexiaSettings.disableBold){
-      rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-weight: 400 !important; }`);
+      rules.push(`${DYSLEXIA_TEXT_SELECTOR} { font-weight: normal !important; }`);
     }
     dyslexiaStyleElement.textContent = rules.join('\n');
   }
