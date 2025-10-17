@@ -101,6 +101,47 @@
   const CURSOR_ARROW_HOTSPOT = [4, 0];
   const CURSOR_POINTER_HOTSPOT = [12, 12];
 
+  const BUTTONS_SLUG = 'moteur-boutons';
+  const BUTTONS_SETTINGS_KEY = 'a11y-widget-buttons-settings:v1';
+  const BUTTONS_SIZE_MIN = 1;
+  const BUTTONS_SIZE_MAX = 1.5;
+  const BUTTONS_SIZE_STEP = 0.05;
+  const BUTTONS_ATTR_SELECTOR = 'html[data-a11y-moteur-boutons="on"]';
+  const BUTTONS_CONTAINER_SELECTORS = ['main', '#content', '.site-content', '.entry-content'];
+  const BUTTONS_BUTTON_SELECTORS = [
+    '.wp-block-button__link:not(#a11y-overlay *)',
+    '.wp-element-button:not(#a11y-overlay *)',
+    'button:not(#a11y-overlay button)',
+    '.button:not(#a11y-overlay .button)',
+    '.btn:not(#a11y-overlay .btn)',
+    'input[type="submit"]:not(#a11y-overlay input)',
+    'input[type="button"]:not(#a11y-overlay input)',
+    'input[type="reset"]:not(#a11y-overlay input)'
+  ];
+  const BUTTONS_TARGET_LIST = (() => {
+    const combos = [];
+    BUTTONS_CONTAINER_SELECTORS.forEach(container => {
+      BUTTONS_BUTTON_SELECTORS.forEach(selector => {
+        combos.push(`${container} ${selector}`);
+      });
+    });
+    return combos;
+  })();
+  const BUTTONS_INSIDE_LIST = BUTTONS_TARGET_LIST.map(selector => `${selector} *`);
+  const BUTTONS_THEMES = [
+    { key: 'default', name: 'Défaut' },
+    { key: 'grey', name: 'Gris', colors: { bg: '#6c757d', text: '#ffffff' } },
+    { key: 'dark', name: 'Sombre', colors: { bg: '#212529', text: '#ffffff' } },
+    { key: 'light', name: 'Clair', colors: { bg: '#f8f9fa', text: '#212529', border: '#dee2e6' } },
+    { key: 'contrast', name: 'Contrasté', colors: { bg: '#ffc107', text: '#000000' } },
+  ];
+  const BUTTONS_THEME_BY_KEY = new Map(BUTTONS_THEMES.map(theme => [theme.key, theme]));
+  const buttonInstances = new Set();
+  let buttonSettings = loadButtonSettings();
+  let buttonActive = false;
+  let buttonStyleElement = null;
+  let buttonIdCounter = 0;
+
   function buildCursorArrow({ fill, stroke, size }){
     return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M4.2,3.8l15,10.2l-7.1,1.5l-3.3,7.4L4.2,3.8z"/></svg>`;
   }
@@ -1297,10 +1338,413 @@ ${interactiveSelectors} {
     return article;
   }
 
+  function getDefaultButtonSettings(){
+    return { size: 1, theme: 'default' };
+  }
+
+  function clampButtonSize(value){
+    const numeric = typeof value === 'number' ? value : parseFloat(value);
+    const fallback = getDefaultButtonSettings().size;
+    if(!isFinite(numeric)){ return fallback; }
+    return Math.min(BUTTONS_SIZE_MAX, Math.max(BUTTONS_SIZE_MIN, numeric));
+  }
+
+  function normalizeButtonTheme(value){
+    if(typeof value !== 'string'){ return getDefaultButtonSettings().theme; }
+    const key = value.toLowerCase();
+    return BUTTONS_THEME_BY_KEY.has(key) ? key : getDefaultButtonSettings().theme;
+  }
+
+  function loadButtonSettings(){
+    const defaults = getDefaultButtonSettings();
+    try {
+      const raw = localStorage.getItem(BUTTONS_SETTINGS_KEY);
+      if(!raw){ return Object.assign({}, defaults); }
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
+      const size = clampButtonSize(parsed.size);
+      const theme = normalizeButtonTheme(parsed.theme);
+      return { size, theme };
+    } catch(err){
+      return Object.assign({}, defaults);
+    }
+  }
+
+  function persistButtonSettings(){
+    const defaults = getDefaultButtonSettings();
+    const size = clampButtonSize(buttonSettings.size);
+    const theme = normalizeButtonTheme(buttonSettings.theme);
+    if(size === defaults.size && theme === defaults.theme){
+      try { localStorage.removeItem(BUTTONS_SETTINGS_KEY); } catch(err){ /* ignore */ }
+      return;
+    }
+    const payload = { size, theme };
+    try { localStorage.setItem(BUTTONS_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
+  }
+
+  function ensureButtonStyleElement(){
+    if(buttonStyleElement && buttonStyleElement.isConnected){
+      return buttonStyleElement;
+    }
+    const styleEl = buttonStyleElement || document.createElement('style');
+    styleEl.setAttribute('data-role', 'a11y-button-styles');
+    document.head.appendChild(styleEl);
+    buttonStyleElement = styleEl;
+    return buttonStyleElement;
+  }
+
+  function formatButtonSize(value){
+    const numeric = clampButtonSize(value);
+    return `x${numeric.toFixed(2).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '')}`;
+  }
+
+  function buildButtonCss(settings){
+    if(!BUTTONS_TARGET_LIST.length){ return ''; }
+    const defaults = getDefaultButtonSettings();
+    const size = clampButtonSize(settings.size);
+    const themeKey = normalizeButtonTheme(settings.theme);
+    const theme = BUTTONS_THEME_BY_KEY.get(themeKey) || BUTTONS_THEME_BY_KEY.get(defaults.theme) || BUTTONS_THEMES[0];
+    const scopedTargets = BUTTONS_TARGET_LIST.map(selector => `${BUTTONS_ATTR_SELECTOR} ${selector}`);
+    const scopedInside = BUTTONS_INSIDE_LIST.map(selector => `${BUTTONS_ATTR_SELECTOR} ${selector}`);
+    const cssParts = [];
+
+    if(size > defaults.size){
+      const formatted = size.toFixed(2).replace(/\.0+$/, '').replace(/\.([1-9])0$/, '.$1');
+      cssParts.push(`${scopedTargets.join(',\n')} { font-size: calc(1em * ${formatted}) !important; padding: calc(0.8em * ${formatted}) calc(1.5em * ${formatted}) !important; }`);
+    }
+
+    if(theme && theme.colors && themeKey !== defaults.theme){
+      const bg = theme.colors.bg || '#000000';
+      const text = theme.colors.text || '#ffffff';
+      const border = theme.colors.border || bg;
+      cssParts.push(`${scopedTargets.join(',\n')} { background-color: ${bg} !important; color: ${text} !important; border-color: ${border} !important; }`);
+      if(scopedInside.length){
+        cssParts.push(`${scopedInside.join(',\n')} { color: ${text} !important; fill: ${text} !important; }`);
+      }
+    }
+
+    return cssParts.join('\n');
+  }
+
+  function updateButtonStyles(){
+    if(!buttonActive){
+      if(buttonStyleElement){ buttonStyleElement.textContent = ''; }
+      return;
+    }
+    const css = buildButtonCss(buttonSettings);
+    if(!css){
+      if(buttonStyleElement){ buttonStyleElement.textContent = ''; }
+      return;
+    }
+    const styleEl = ensureButtonStyleElement();
+    styleEl.textContent = css;
+  }
+
+  function pruneButtonInstances(){
+    buttonInstances.forEach(instance => {
+      if(!instance){
+        buttonInstances.delete(instance);
+        return;
+      }
+      if(instance.wasConnected && (!instance.article || !instance.article.isConnected)){
+        buttonInstances.delete(instance);
+      }
+    });
+  }
+
+  function getButtonThemeIndex(themeKey){
+    const normalized = normalizeButtonTheme(themeKey);
+    const index = BUTTONS_THEMES.findIndex(theme => theme.key === normalized);
+    return index === -1 ? 0 : index;
+  }
+
+  function getButtonTheme(themeKey){
+    const normalized = normalizeButtonTheme(themeKey);
+    return BUTTONS_THEME_BY_KEY.get(normalized) || BUTTONS_THEMES[0];
+  }
+
+  function updateButtonInstanceUI(instance){
+    if(!instance){ return; }
+    const { article, controls, sizeSlider, sizeValue, themeName, prevBtn, nextBtn, resetBtn } = instance;
+    const active = buttonActive;
+    const theme = getButtonTheme(buttonSettings.theme);
+
+    if(article){
+      if(article.isConnected){ instance.wasConnected = true; }
+      article.classList.toggle('is-disabled', !active);
+    }
+
+    if(controls){
+      controls.classList.toggle('is-disabled', !active);
+      if(!active){ controls.setAttribute('aria-disabled', 'true'); }
+      else { controls.removeAttribute('aria-disabled'); }
+    }
+
+    if(sizeSlider){
+      sizeSlider.disabled = !active;
+      setInputValue(sizeSlider, String(clampButtonSize(buttonSettings.size)));
+    }
+
+    if(sizeValue){
+      sizeValue.textContent = formatButtonSize(buttonSettings.size);
+    }
+
+    if(themeName){
+      themeName.textContent = theme && theme.name ? theme.name : normalizeButtonTheme(buttonSettings.theme);
+    }
+
+    const disableControls = !active;
+    if(prevBtn){ prevBtn.disabled = disableControls; }
+    if(nextBtn){ nextBtn.disabled = disableControls; }
+    if(resetBtn){ resetBtn.disabled = disableControls; }
+  }
+
+  function syncButtonInstances(){
+    pruneButtonInstances();
+    buttonInstances.forEach(instance => updateButtonInstanceUI(instance));
+  }
+
+  function setButtonSize(value, options = {}){
+    const next = clampButtonSize(value);
+    const changed = clampButtonSize(buttonSettings.size) !== next;
+    buttonSettings.size = next;
+    if(changed || options.force){
+      updateButtonStyles();
+      syncButtonInstances();
+      if(options.persist !== false){ persistButtonSettings(); }
+    } else if(options.syncOnly){
+      syncButtonInstances();
+    }
+  }
+
+  function setButtonTheme(value, options = {}){
+    const next = normalizeButtonTheme(value);
+    const changed = normalizeButtonTheme(buttonSettings.theme) !== next;
+    buttonSettings.theme = next;
+    if(changed || options.force){
+      updateButtonStyles();
+      syncButtonInstances();
+      if(options.persist !== false){ persistButtonSettings(); }
+    } else if(options.syncOnly){
+      syncButtonInstances();
+    }
+  }
+
+  function cycleButtonTheme(direction){
+    if(!BUTTONS_THEMES.length){ return; }
+    const step = direction >= 0 ? 1 : -1;
+    const currentIndex = getButtonThemeIndex(buttonSettings.theme);
+    const total = BUTTONS_THEMES.length;
+    const nextIndex = (currentIndex + step + total) % total;
+    setButtonTheme(BUTTONS_THEMES[nextIndex].key);
+  }
+
+  function resetButtonSettings(options = {}){
+    buttonSettings = getDefaultButtonSettings();
+    updateButtonStyles();
+    syncButtonInstances();
+    if(options.persist !== false){
+      persistButtonSettings();
+    }
+  }
+
+  function setButtonActive(value){
+    const next = !!value;
+    if(buttonActive === next){
+      if(next){ updateButtonStyles(); }
+      syncButtonInstances();
+      return;
+    }
+    buttonActive = next;
+    if(buttonActive){
+      ensureButtonStyleElement();
+      updateButtonStyles();
+    } else if(buttonStyleElement){
+      buttonStyleElement.textContent = '';
+    }
+    syncButtonInstances();
+  }
+
+  function createButtonCard(feature){
+    if(!feature || typeof feature.slug !== 'string' || !feature.slug){ return null; }
+
+    const article = document.createElement('article');
+    article.className = 'a11y-card a11y-card--buttons';
+    article.setAttribute('data-role', 'feature-card');
+
+    const header = document.createElement('div');
+    header.className = 'a11y-buttons__header';
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.setAttribute('data-role', 'feature-meta');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = feature.label || '';
+    meta.appendChild(labelEl);
+
+    if(feature.hint){
+      const hintEl = document.createElement('span');
+      hintEl.className = 'hint';
+      hintEl.textContent = feature.hint;
+      meta.appendChild(hintEl);
+    }
+
+    header.appendChild(meta);
+
+    const switchEl = buildSwitch(feature.slug, feature.aria_label || feature.label || '');
+    if(switchEl){
+      switchEl.classList.add('a11y-buttons__switch');
+      header.appendChild(switchEl);
+    }
+
+    article.appendChild(header);
+
+    const controls = document.createElement('form');
+    controls.className = 'a11y-buttons__controls';
+    controls.setAttribute('data-role', 'buttons-controls');
+    controls.addEventListener('submit', event => { event.preventDefault(); });
+
+    const settings = feature.settings && typeof feature.settings === 'object' ? feature.settings : {};
+    const texts = {
+      size_label: typeof settings.size_label === 'string' ? settings.size_label : '',
+      size_help: typeof settings.size_help === 'string' ? settings.size_help : '',
+      theme_label: typeof settings.theme_label === 'string' ? settings.theme_label : '',
+      theme_help: typeof settings.theme_help === 'string' ? settings.theme_help : '',
+      theme_prev: typeof settings.theme_prev === 'string' ? settings.theme_prev : '',
+      theme_next: typeof settings.theme_next === 'string' ? settings.theme_next : '',
+      reset_label: typeof settings.reset_label === 'string' ? settings.reset_label : '',
+    };
+
+    const baseId = `a11y-buttons-${++buttonIdCounter}`;
+
+    const sizeField = document.createElement('div');
+    sizeField.className = 'a11y-buttons__field';
+    const sizeLabel = document.createElement('label');
+    sizeLabel.setAttribute('for', `${baseId}-size`);
+    sizeLabel.className = 'a11y-buttons__label';
+    sizeLabel.textContent = texts.size_label || '';
+    sizeLabel.appendChild(document.createTextNode(' '));
+    const sizeValue = document.createElement('span');
+    sizeValue.className = 'a11y-buttons__value';
+    sizeLabel.appendChild(sizeValue);
+    sizeField.appendChild(sizeLabel);
+
+    const sizeSlider = document.createElement('input');
+    sizeSlider.type = 'range';
+    sizeSlider.id = `${baseId}-size`;
+    sizeSlider.className = 'a11y-buttons__slider';
+    sizeSlider.min = String(BUTTONS_SIZE_MIN);
+    sizeSlider.max = String(BUTTONS_SIZE_MAX);
+    sizeSlider.step = String(BUTTONS_SIZE_STEP);
+    sizeSlider.value = String(clampButtonSize(buttonSettings.size));
+    sizeField.appendChild(sizeSlider);
+
+    if(texts.size_help){
+      const sizeHelp = document.createElement('p');
+      sizeHelp.className = 'a11y-buttons__help';
+      sizeHelp.textContent = texts.size_help;
+      sizeField.appendChild(sizeHelp);
+    }
+
+    controls.appendChild(sizeField);
+
+    const themeField = document.createElement('div');
+    themeField.className = 'a11y-buttons__field';
+    const themeLabel = document.createElement('span');
+    themeLabel.className = 'a11y-buttons__label';
+    themeLabel.textContent = texts.theme_label || '';
+    themeField.appendChild(themeLabel);
+
+    const themeControls = document.createElement('div');
+    themeControls.className = 'a11y-buttons__themes';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.type = 'button';
+    prevBtn.className = 'a11y-buttons__theme-button a11y-buttons__theme-button--prev';
+    const prevLabel = texts.theme_prev || 'Thème précédent';
+    prevBtn.setAttribute('aria-label', prevLabel);
+    prevBtn.title = prevLabel;
+    prevBtn.innerHTML = '<span aria-hidden="true">◀</span>';
+    themeControls.appendChild(prevBtn);
+
+    const themeName = document.createElement('span');
+    themeName.className = 'a11y-buttons__theme-name';
+    themeControls.appendChild(themeName);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.type = 'button';
+    nextBtn.className = 'a11y-buttons__theme-button a11y-buttons__theme-button--next';
+    const nextLabel = texts.theme_next || 'Thème suivant';
+    nextBtn.setAttribute('aria-label', nextLabel);
+    nextBtn.title = nextLabel;
+    nextBtn.innerHTML = '<span aria-hidden="true">▶</span>';
+    themeControls.appendChild(nextBtn);
+
+    themeField.appendChild(themeControls);
+
+    if(texts.theme_help){
+      const themeHelp = document.createElement('p');
+      themeHelp.className = 'a11y-buttons__help';
+      themeHelp.textContent = texts.theme_help;
+      themeField.appendChild(themeHelp);
+    }
+
+    controls.appendChild(themeField);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'a11y-buttons__reset';
+    const resetLabel = texts.reset_label || 'Réinitialiser';
+    resetBtn.textContent = resetLabel;
+    resetBtn.setAttribute('aria-label', resetLabel);
+    controls.appendChild(resetBtn);
+
+    article.appendChild(controls);
+
+    const instance = {
+      article,
+      controls,
+      sizeSlider,
+      sizeValue,
+      themeName,
+      prevBtn,
+      nextBtn,
+      resetBtn,
+      wasConnected: false,
+    };
+
+    buttonInstances.add(instance);
+    syncButtonInstances();
+
+    sizeSlider.addEventListener('input', () => setButtonSize(sizeSlider.value, { persist: false }));
+    sizeSlider.addEventListener('change', () => setButtonSize(sizeSlider.value, { force: true }));
+    prevBtn.addEventListener('click', () => cycleButtonTheme(-1));
+    nextBtn.addEventListener('click', () => cycleButtonTheme(1));
+    resetBtn.addEventListener('click', () => resetButtonSettings());
+
+    const markConnection = () => {
+      if(instance.article && instance.article.isConnected){
+        instance.wasConnected = true;
+      }
+    };
+    if(typeof requestAnimationFrame === 'function'){
+      requestAnimationFrame(markConnection);
+    } else {
+      setTimeout(markConnection, 0);
+    }
+
+    return article;
+  }
+
   function createCustomFeature(feature){
     const template = typeof feature.template === 'string' ? feature.template : '';
     if(template === 'dyslexie-highlighter'){
       return createDyslexiaCard(feature);
+    }
+    if(template === 'button-settings'){
+      return createButtonCard(feature);
     }
     if(template === 'cursor-settings'){
       return createCursorCard(feature);
@@ -1722,6 +2166,11 @@ ${interactiveSelectors} {
     setDyslexiaActive(on);
   });
 
+  A11yAPI.registerFeature(BUTTONS_SLUG, on => {
+    if(on){ ensureButtonStyleElement(); }
+    setButtonActive(on);
+  });
+
   A11yAPI.registerFeature(CURSOR_SLUG, on => {
     if(on){ ensureCursorStyleElement(); }
     setCursorActive(on);
@@ -1796,12 +2245,14 @@ ${interactiveSelectors} {
       try { localStorage.removeItem(STORAGE_KEY); } catch(err){}
       try { localStorage.removeItem(LAUNCHER_POS_KEY); } catch(err){}
       try { localStorage.removeItem(PANEL_SIDE_KEY); } catch(err){}
+      try { localStorage.removeItem(BUTTONS_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(CURSOR_SETTINGS_KEY); } catch(err){}
       document.documentElement.style.removeProperty('--a11y-launcher-x');
       document.documentElement.style.removeProperty('--a11y-launcher-y');
       launcherLastPos = null;
       hasCustomLauncherPosition = false;
       applyPanelSide('right');
+      resetButtonSettings({ persist: false });
       resetCursorSettings();
       setCursorActive(false);
     });
