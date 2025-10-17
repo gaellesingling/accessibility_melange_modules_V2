@@ -177,6 +177,21 @@ function a11y_widget_get_default_sections() {
                     'aria_label'  => __( 'Exemple de réglage moteur', 'a11y-widget' ),
                     'placeholder' => true,
                 ),
+                array(
+                    'slug'       => 'moteur-curseur',
+                    'label'      => __( 'Curseur', 'a11y-widget' ),
+                    'hint'       => __( 'Personnalisez la taille, la forme et la couleur du pointeur.', 'a11y-widget' ),
+                    'aria_label' => __( 'Configurer le curseur personnalisé', 'a11y-widget' ),
+                    'template'   => 'cursor-settings',
+                    'settings'   => array(
+                        'size_label'  => __( 'Taille du curseur', 'a11y-widget' ),
+                        'size_help'   => __( 'Ajustez le diamètre du pointeur pour le rendre plus visible.', 'a11y-widget' ),
+                        'shape_label' => __( 'Forme du curseur', 'a11y-widget' ),
+                        'shape_help'  => __( 'Choisissez la silhouette du curseur parmi les options disponibles.', 'a11y-widget' ),
+                        'color_label' => __( 'Couleur du curseur', 'a11y-widget' ),
+                        'color_help'  => __( 'Appliquez une couleur unie pour renforcer le contraste.', 'a11y-widget' ),
+                    ),
+                ),
             ),
         ),
         array(
