@@ -437,7 +437,7 @@
   }
 
   function loadDyslexiaSettings(){
-    const defaults = { letter: '', color: DYSLEXIA_DEFAULT_COLOR, accentSensitive: false };
+    const defaults = { letter: '', color: DYSLEXIA_DEFAULT_COLOR, accentInclusive: false };
     try {
       const raw = localStorage.getItem(DYSLEXIA_SETTINGS_KEY);
       if(!raw){ return Object.assign({}, defaults); }
@@ -445,15 +445,30 @@
       if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
       const letter = sanitizeDyslexiaLetter(typeof parsed.letter === 'string' ? parsed.letter : '');
       const color = normalizeDyslexiaColor(typeof parsed.color === 'string' ? parsed.color : DYSLEXIA_DEFAULT_COLOR);
-      const accentSensitive = !!parsed.accentSensitive;
-      return { letter, color, accentSensitive };
+      let accentInclusive = defaults.accentInclusive;
+      const hasAccentInclusive = Object.prototype.hasOwnProperty.call(parsed, 'accentInclusive');
+      if(hasAccentInclusive){
+        accentInclusive = !!parsed.accentInclusive;
+      } else if(Object.prototype.hasOwnProperty.call(parsed, 'accentSensitive')) {
+        accentInclusive = !parsed.accentSensitive;
+      }
+      const result = { letter, color, accentInclusive };
+      if(!hasAccentInclusive && Object.prototype.hasOwnProperty.call(parsed, 'accentSensitive')){
+        try { localStorage.setItem(DYSLEXIA_SETTINGS_KEY, JSON.stringify(result)); } catch(err){ /* ignore */ }
+      }
+      return result;
     } catch(err){
       return Object.assign({}, defaults);
     }
   }
 
   function persistDyslexiaSettings(){
-    try { localStorage.setItem(DYSLEXIA_SETTINGS_KEY, JSON.stringify(dyslexiaSettings)); } catch(err){ /* ignore */ }
+    const payload = {
+      letter: dyslexiaSettings.letter || '',
+      color: dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR,
+      accentInclusive: !!dyslexiaSettings.accentInclusive
+    };
+    try { localStorage.setItem(DYSLEXIA_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
   }
 
   function setInputValue(input, value){
@@ -511,7 +526,7 @@
     }
     if(accentInput){
       accentInput.disabled = !active;
-      setCheckboxState(accentInput, !!dyslexiaSettings.accentSensitive);
+      setCheckboxState(accentInput, !!dyslexiaSettings.accentInclusive);
       const accentLabel = accentInput.nextElementSibling && accentInput.nextElementSibling.matches('[data-role="dyslexie-accent-label"]')
         ? accentInput.nextElementSibling
         : null;
@@ -538,13 +553,13 @@
     return value;
   }
 
-  function dyslexiaCharMatches(char, baseLetter, normalizedLetter, accentSensitive){
+  function dyslexiaCharMatches(char, baseLetter, normalizedLetter, accentInclusive){
     if(!char){ return false; }
-    if(accentSensitive){
-      return char.toLocaleLowerCase() === baseLetter;
+    if(accentInclusive){
+      const normalized = stripDyslexiaAccents(char).toLocaleLowerCase();
+      return normalized === normalizedLetter;
     }
-    const normalized = stripDyslexiaAccents(char).toLocaleLowerCase();
-    return normalized === normalizedLetter;
+    return char.toLocaleLowerCase() === baseLetter;
   }
 
   function clearDyslexiaHighlights(){
@@ -559,7 +574,7 @@
     });
   }
 
-  function buildDyslexiaFragments(text, baseLetter, normalizedLetter, accentSensitive, color){
+  function buildDyslexiaFragments(text, baseLetter, normalizedLetter, accentInclusive, color){
     if(!text){ return null; }
     const chars = Array.from(text);
     if(!chars.length){ return null; }
@@ -567,7 +582,7 @@
     let buffer = '';
     let matched = false;
     chars.forEach(char => {
-      if(dyslexiaCharMatches(char, baseLetter, normalizedLetter, accentSensitive)){
+      if(dyslexiaCharMatches(char, baseLetter, normalizedLetter, accentInclusive)){
         matched = true;
         if(buffer){
           nodes.push(document.createTextNode(buffer));
@@ -620,7 +635,7 @@
     if(!root){ return; }
     const baseLetter = letter.toLocaleLowerCase();
     const normalizedLetter = stripDyslexiaAccents(letter).toLocaleLowerCase();
-    const accentSensitive = !!dyslexiaSettings.accentSensitive;
+    const accentInclusive = !!dyslexiaSettings.accentInclusive;
     const color = dyslexiaSettings.color || DYSLEXIA_DEFAULT_COLOR;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
       acceptNode(node){
@@ -631,7 +646,7 @@
     while(walker.nextNode()){
       const node = walker.currentNode;
       if(!node || !node.nodeValue){ continue; }
-      const fragments = buildDyslexiaFragments(node.nodeValue, baseLetter, normalizedLetter, accentSensitive, color);
+      const fragments = buildDyslexiaFragments(node.nodeValue, baseLetter, normalizedLetter, accentInclusive, color);
       if(!fragments || !fragments.length){ continue; }
       const fragment = document.createDocumentFragment();
       fragments.forEach(part => fragment.appendChild(part));
@@ -668,10 +683,10 @@
     syncDyslexiaInstances();
   }
 
-  function setDyslexiaAccentSensitive(value){
+  function setDyslexiaAccentInclusive(value){
     const next = !!value;
-    const changed = !!dyslexiaSettings.accentSensitive !== next;
-    dyslexiaSettings.accentSensitive = next;
+    const changed = !!dyslexiaSettings.accentInclusive !== next;
+    dyslexiaSettings.accentInclusive = next;
     if(changed){ persistDyslexiaSettings(); }
     if(dyslexiaActive && dyslexiaSettings.letter){
       applyDyslexiaHighlights();
@@ -697,7 +712,7 @@
   }
 
   function handleDyslexiaAccentInput(checked){
-    setDyslexiaAccentSensitive(checked);
+    setDyslexiaAccentInclusive(checked);
   }
 
   function setDyslexiaActive(active){
