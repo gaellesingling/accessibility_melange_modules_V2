@@ -178,6 +178,22 @@ function a11y_widget_get_default_sections() {
                     'placeholder' => true,
                 ),
                 array(
+                    'slug'       => 'moteur-boutons',
+                    'label'      => __( 'Boutons', 'a11y-widget' ),
+                    'hint'       => __( 'Ajustez la taille et les couleurs des boutons du site.', 'a11y-widget' ),
+                    'aria_label' => __( 'Configurer l’apparence des boutons', 'a11y-widget' ),
+                    'template'   => 'button-settings',
+                    'settings'   => array(
+                        'size_label'  => __( 'Taille des boutons', 'a11y-widget' ),
+                        'size_help'   => __( 'Augmentez la taille et l’espacement pour faciliter le clic.', 'a11y-widget' ),
+                        'theme_label' => __( 'Couleurs des boutons', 'a11y-widget' ),
+                        'theme_help'  => __( 'Choisissez un thème pour améliorer le contraste des boutons.', 'a11y-widget' ),
+                        'theme_prev'  => __( 'Thème précédent', 'a11y-widget' ),
+                        'theme_next'  => __( 'Thème suivant', 'a11y-widget' ),
+                        'reset_label' => __( 'Réinitialiser les boutons', 'a11y-widget' ),
+                    ),
+                ),
+                array(
                     'slug'       => 'moteur-curseur',
                     'label'      => __( 'Curseur', 'a11y-widget' ),
                     'hint'       => __( 'Personnalisez la taille et la couleur du pointeur.', 'a11y-widget' ),
