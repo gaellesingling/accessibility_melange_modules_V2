@@ -91,39 +91,23 @@
   const CURSOR_SLUG = 'moteur-curseur';
   const CURSOR_SETTINGS_KEY = 'a11y-widget-cursor-settings:v1';
   const CURSOR_BASE_SIZE = 24;
-  const CURSOR_SIZE_MIN = 0.8;
-  const CURSOR_SIZE_MAX = 2.5;
+  const CURSOR_SIZE_MIN = 1;
+  const CURSOR_SIZE_MAX = 2;
   const CURSOR_SIZE_STEP = 0.1;
   const CURSOR_COLORS = {
     white: { label: 'Blanc', fill: '#ffffff', stroke: '#202124' },
     black: { label: 'Noir', fill: '#202124', stroke: '#ffffff' },
-    yellow: { label: 'Jaune', fill: '#ffeb3b', stroke: '#202124' },
-    blue: { label: 'Bleu', fill: '#2962ff', stroke: '#ffffff' },
-    red: { label: 'Rouge', fill: '#f44336', stroke: '#ffffff' },
   };
-  const CURSOR_SHAPES = {
-    arrow: {
-      label: 'Flèche',
-      buildDefault: ({ fill, stroke, size }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M4.2,3.8l15,10.2l-7.1,1.5l-3.3,7.4L4.2,3.8z"/></svg>`,
-      buildInteractive: ({ fill, stroke, size }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M4.2,3.8l15,10.2l-7.1,1.5l-3.3,7.4L4.2,3.8z"/></svg>`,
-      hotspotDefault: [4, 0],
-      hotspotInteractive: [12, 12],
-    },
-    pointer: {
-      label: 'Main',
-      buildDefault: ({ fill, stroke, size }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M9.6,22.2c-0.4,0.1-0.9-0.1-1-0.5l-1.3-4.2H4.8c-1.8,0-2.5-1.1-1.6-2.5L9,2.2c0.7-1.1,2-1.1,2.8,0l5.8,12.8c0.9,1.4,0.2,2.5-1.6,2.5h-2.5l-1.3,4.2C10.1,22.1,9.8,22.3,9.6,22.2z"/></svg>`,
-      buildInteractive: ({ fill, stroke, size }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M9.6,22.2c-0.4,0.1-0.9-0.1-1-0.5l-1.3-4.2H4.8c-1.8,0-2.5-1.1-1.6-2.5L9,2.2c0.7-1.1,2-1.1,2.8,0l5.8,12.8c0.9,1.4,0.2,2.5-1.6,2.5h-2.5l-1.3,4.2C10.1,22.1,9.8,22.3,9.6,22.2z"/></svg>`,
-      hotspotDefault: [6, 2],
-      hotspotInteractive: [12, 12],
-    },
-    circle: {
-      label: 'Cercle',
-      buildDefault: ({ fill, stroke, size }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/></svg>`,
-      buildInteractive: ({ fill, stroke, size }) => `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/></svg>`,
-      hotspotDefault: [12, 12],
-      hotspotInteractive: [12, 12],
-    },
-  };
+  const CURSOR_ARROW_HOTSPOT = [4, 0];
+  const CURSOR_POINTER_HOTSPOT = [12, 12];
+
+  function buildCursorArrow({ fill, stroke, size }){
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M4.2,3.8l15,10.2l-7.1,1.5l-3.3,7.4L4.2,3.8z"/></svg>`;
+  }
+
+  function buildCursorPointer({ fill, stroke, size }){
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${fill}" stroke="${stroke}" stroke-width="1.5" d="M9.6,22.2c-0.4,0.1-0.9-0.1-1-0.5l-1.3-4.2H4.8c-1.8,0-2.5-1.1-1.6-2.5L9,2.2c0.7-1.1,2-1.1,2.8,0l5.8,12.8c0.9,1.4,0.2,2.5-1.6,2.5h-2.5l-1.3,4.2C10.1,22.1,9.8,22.3,9.6,22.2z"/></svg>`;
+  }
   const cursorInstances = new Set();
   let cursorSettings = loadCursorSettings();
   let cursorActive = false;
@@ -478,7 +462,7 @@
   }
 
   function getDefaultCursorSettings(){
-    return { size: 1, shape: 'arrow', color: 'black' };
+    return { size: 1, color: 'black' };
   }
 
   function clampCursorSize(value){
@@ -486,12 +470,6 @@
     const fallback = getDefaultCursorSettings().size;
     if(!isFinite(numeric)){ return fallback; }
     return Math.min(CURSOR_SIZE_MAX, Math.max(CURSOR_SIZE_MIN, numeric));
-  }
-
-  function normalizeCursorShape(value){
-    if(typeof value !== 'string'){ return getDefaultCursorSettings().shape; }
-    const key = value.toLowerCase();
-    return Object.prototype.hasOwnProperty.call(CURSOR_SHAPES, key) ? key : getDefaultCursorSettings().shape;
   }
 
   function normalizeCursorColor(value){
@@ -508,9 +486,8 @@
       const parsed = JSON.parse(raw);
       if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
       const size = clampCursorSize(parsed.size);
-      const shape = normalizeCursorShape(parsed.shape);
       const color = normalizeCursorColor(parsed.color);
-      return { size, shape, color };
+      return { size, color };
     } catch(err){
       return Object.assign({}, defaults);
     }
@@ -519,7 +496,6 @@
   function persistCursorSettings(){
     const payload = {
       size: clampCursorSize(cursorSettings.size),
-      shape: normalizeCursorShape(cursorSettings.shape),
       color: normalizeCursorColor(cursorSettings.color),
     };
     try { localStorage.setItem(CURSOR_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
@@ -554,13 +530,11 @@
   ].join(', ');
 
   function getCursorPayload(settings){
-    const shapeKey = normalizeCursorShape(settings.shape);
     const colorKey = normalizeCursorColor(settings.color);
     const sizeMultiplier = clampCursorSize(settings.size);
-    const shape = CURSOR_SHAPES[shapeKey] || CURSOR_SHAPES.arrow;
     const color = CURSOR_COLORS[colorKey] || CURSOR_COLORS.black;
     const pixelSize = Math.round(CURSOR_BASE_SIZE * sizeMultiplier);
-    return { shapeKey, colorKey, shape, color, pixelSize, sizeMultiplier };
+    return { colorKey, color, pixelSize, sizeMultiplier };
   }
 
   function buildCursorRule(svgBuilder, hotspot, payload){
@@ -575,9 +549,9 @@
 
   function buildCursorCss(settings){
     const payload = getCursorPayload(settings);
-    const defaultRule = buildCursorRule(payload.shape.buildDefault, payload.shape.hotspotDefault, payload);
-    const interactiveRule = buildCursorRule(payload.shape.buildInteractive, payload.shape.hotspotInteractive, payload);
-    if(payload.sizeMultiplier === 1 && payload.colorKey === 'black' && payload.shapeKey === 'arrow'){
+    const defaultRule = buildCursorRule(buildCursorArrow, CURSOR_ARROW_HOTSPOT, payload);
+    const interactiveRule = buildCursorRule(buildCursorPointer, CURSOR_POINTER_HOTSPOT, payload);
+    if(payload.sizeMultiplier === 1 && payload.colorKey === 'black'){
       return '';
     }
     return `
@@ -628,7 +602,7 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
 
   function updateCursorInstanceUI(instance){
     if(!instance){ return; }
-    const { article, controls, sizeSlider, sizeValue, shapeInputs, colorInputs, shapeOptions, colorOptions } = instance;
+    const { article, controls, sizeSlider, sizeValue, colorInputs, colorOptions } = instance;
     const active = cursorActive;
     if(article){
       if(article.isConnected){ instance.wasConnected = true; }
@@ -647,20 +621,7 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
       const formatted = clampCursorSize(cursorSettings.size).toFixed(1).replace('.', ',');
       sizeValue.textContent = `x${formatted}`;
     }
-    const currentShape = normalizeCursorShape(cursorSettings.shape);
     const currentColor = normalizeCursorColor(cursorSettings.color);
-    if(Array.isArray(shapeInputs)){
-      shapeInputs.forEach((input, index) => {
-        if(!input){ return; }
-        const isSelected = input.value === currentShape;
-        input.disabled = !active;
-        setCheckboxState(input, isSelected);
-        const label = Array.isArray(shapeOptions) ? shapeOptions[index] : null;
-        if(label){
-          label.classList.toggle('is-selected', isSelected);
-        }
-      });
-    }
     if(Array.isArray(colorInputs)){
       colorInputs.forEach((input, index) => {
         if(!input){ return; }
@@ -684,19 +645,6 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
     const next = clampCursorSize(value);
     const changed = clampCursorSize(cursorSettings.size) !== next;
     cursorSettings.size = next;
-    if(changed || options.force){
-      updateCursorStyles();
-      syncCursorInstances();
-      if(options.persist !== false){ persistCursorSettings(); }
-    } else if(options.syncOnly){
-      syncCursorInstances();
-    }
-  }
-
-  function setCursorShape(value, options = {}){
-    const next = normalizeCursorShape(value);
-    const changed = normalizeCursorShape(cursorSettings.shape) !== next;
-    cursorSettings.shape = next;
     if(changed || options.force){
       updateCursorStyles();
       syncCursorInstances();
@@ -1225,8 +1173,6 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
     const texts = {
       size_label: typeof settings.size_label === 'string' ? settings.size_label : '',
       size_help: typeof settings.size_help === 'string' ? settings.size_help : '',
-      shape_label: typeof settings.shape_label === 'string' ? settings.shape_label : '',
-      shape_help: typeof settings.shape_help === 'string' ? settings.shape_help : '',
       color_label: typeof settings.color_label === 'string' ? settings.color_label : '',
       color_help: typeof settings.color_help === 'string' ? settings.color_help : '',
     };
@@ -1263,49 +1209,6 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
     }
 
     controls.appendChild(sizeField);
-
-    const shapeField = document.createElement('fieldset');
-    shapeField.className = 'a11y-cursor__field';
-    const shapeLegend = document.createElement('legend');
-    shapeLegend.className = 'a11y-cursor__label';
-    shapeLegend.textContent = texts.shape_label || '';
-    shapeField.appendChild(shapeLegend);
-
-    const shapeChoices = document.createElement('div');
-    shapeChoices.className = 'a11y-cursor__choices';
-    const shapeInputs = [];
-    const shapeOptions = [];
-    Object.keys(CURSOR_SHAPES).forEach(shapeKey => {
-      const shapeData = CURSOR_SHAPES[shapeKey];
-      const optionId = `${baseId}-shape-${shapeKey}`;
-      const optionLabel = document.createElement('label');
-      optionLabel.className = 'a11y-cursor__option';
-      optionLabel.setAttribute('for', optionId);
-      const radio = document.createElement('input');
-      radio.type = 'radio';
-      radio.className = 'a11y-cursor__radio';
-      radio.name = `${baseId}-shape`;
-      radio.id = optionId;
-      radio.value = shapeKey;
-      const text = document.createElement('span');
-      text.className = 'a11y-cursor__option-text';
-      text.textContent = shapeData && shapeData.label ? shapeData.label : shapeKey;
-      optionLabel.appendChild(radio);
-      optionLabel.appendChild(text);
-      shapeChoices.appendChild(optionLabel);
-      shapeInputs.push(radio);
-      shapeOptions.push(optionLabel);
-    });
-    shapeField.appendChild(shapeChoices);
-
-    if(texts.shape_help){
-      const shapeHelp = document.createElement('p');
-      shapeHelp.className = 'a11y-cursor__help';
-      shapeHelp.textContent = texts.shape_help;
-      shapeField.appendChild(shapeHelp);
-    }
-
-    controls.appendChild(shapeField);
 
     const colorField = document.createElement('fieldset');
     colorField.className = 'a11y-cursor__field';
@@ -1362,8 +1265,6 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
       controls,
       sizeSlider,
       sizeValue,
-      shapeInputs,
-      shapeOptions,
       colorInputs,
       colorOptions,
       wasConnected: false,
@@ -1374,9 +1275,6 @@ html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
 
     sizeSlider.addEventListener('input', () => setCursorSize(sizeSlider.value, { persist: false }));
     sizeSlider.addEventListener('change', () => setCursorSize(sizeSlider.value, { force: true }));
-    shapeInputs.forEach(input => {
-      input.addEventListener('change', () => { if(input.checked){ setCursorShape(input.value); } });
-    });
     colorInputs.forEach(input => {
       input.addEventListener('change', () => { if(input.checked){ setCursorColor(input.value); } });
     });
