@@ -1,0 +1,25 @@
+#cb-panel { position: fixed; left: -240px; top: 30%; transform: translateY(-50%); width: 240px; background-color: #fff; border: 1px solid #ddd; border-top-right-radius: 8px; border-bottom-right-radius: 8px; box-shadow: 2px 0 10px rgba(0,0,0,.1); z-index: 100000; transition: left .3s ease-in-out; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+#cb-panel.open { left: 0; }
+#cb-handle { position: absolute; right: -45px; top: 0; width: 45px; height: 45px; background-color: #0073aa; color: #fff; cursor: pointer; display: flex; justify-content: center; align-items: center; font-size: 20px; border-top-right-radius: 8px; border-bottom-right-radius: 8px; }
+#cb-content { padding: 15px; }
+#cb-content h4 { margin-top: 0; margin-bottom: 15px; font-size: 16px; }
+#cb-content p { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: #555; margin: 15px 0 5px; }
+#cb-size-value { font-weight: 500; font-family: monospace; background-color: #eee; padding: 2px 5px; border-radius: 4px; }
+#cb-content input[type=range] { width: 100%; }
+#cb-buttons { display: flex; justify-content: center; margin-top: 20px; }
+#cb-buttons button { width: 100%; padding: 10px; border: none; border-radius: 4px; color: #fff; cursor: pointer; }
+#cb-reset { background-color: #d63638; }
+#cb-theme-carousel { display: flex; justify-content: space-between; align-items: center; border: 1px solid #ddd; border-radius: 5px; padding: 5px 8px; }
+#cb-theme-name { font-weight: 500; flex-grow: 1; text-align: center; }
+.cb-arrow-btn { background: none; border: none; cursor: pointer; font-size: 14px; padding: 5px; color: #777; transition: color 0.2s ease-in-out; }
+.cb-arrow-btn:hover { color: #2271b1; }
+#cb-size-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 8px; background: #e9ecef; border-radius: 5px; outline: none; opacity: 0.7; transition: opacity .2s; }
+#cb-size-slider:hover { opacity: 1; }
+#cb-size-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 20px; height: 20px; background: #2271b1; border-radius: 50%; cursor: pointer; box-shadow: 0 0 2px rgba(0,0,0,0.2); }
+#cb-size-slider::-moz-range-thumb { width: 20px; height: 20px; background: #2271b1; border-radius: 50%; cursor: pointer; border: none; box-shadow: 0 0 2px rgba(0,0,0,0.2); }
+main .wp-block-button__link, main .wp-element-button, main button, main .button, main .btn, main input[type="submit"], main input[type="button"], main input[type="reset"],
+#content .wp-block-button__link, #content .wp-element-button, #content button, #content .button, #content .btn, #content input[type="submit"], #content input[type="button"], #content input[type="reset"],
+.site-content .wp-block-button__link, .site-content .wp-element-button, .site-content button, .site-content .button, .site-content .btn, .site-content input[type="submit"], .site-content input[type="button"], .site-content input[type="reset"],
+.entry-content .wp-block-button__link, .entry-content .wp-element-button, .entry-content button, .entry-content .button, .entry-content .btn, .entry-content input[type="submit"], .entry-content input[type="button"], .entry-content input[type="reset"] {
+    transition: font-size 0.2s ease, padding 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
