@@ -555,12 +555,10 @@
       return '';
     }
     return `
-html[data-a11yMoteurCurseur="on"] {
-  cursor: ${defaultRule}, auto !important;
-}
+html[data-a11yMoteurCurseur="on"],
 html[data-a11yMoteurCurseur="on"] body,
 html[data-a11yMoteurCurseur="on"] body * {
-  cursor: inherit !important;
+  cursor: ${defaultRule}, auto !important;
 }
 html[data-a11yMoteurCurseur="on"] body ${CURSOR_CLICKABLE_SELECTORS},
 html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider,
