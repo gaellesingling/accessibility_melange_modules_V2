@@ -411,7 +411,8 @@
   font-weight: 600;
   font-size: .95rem;
 }
-.a11y-buttons__reset {
+.a11y-buttons__reset,
+.a11y-dyslexie__reset {
   align-self: flex-start;
   border: none;
   background: var(--a11y-primary);
@@ -422,16 +423,19 @@
   cursor: pointer;
   transition: background .2s ease, box-shadow .2s ease, transform .2s ease;
 }
-.a11y-buttons__reset:focus-visible {
+.a11y-buttons__reset:focus-visible,
+.a11y-dyslexie__reset:focus-visible {
   outline: 3px solid #000;
   outline-offset: 2px;
 }
-.a11y-buttons__reset:not([disabled]):hover {
+.a11y-buttons__reset:not([disabled]):hover,
+.a11y-dyslexie__reset:not([disabled]):hover {
   background: #b8174b;
   box-shadow: 0 6px 16px rgba(214, 30, 91, 0.25);
   transform: translateY(-1px);
 }
-.a11y-buttons__reset[disabled] {
+.a11y-buttons__reset[disabled],
+.a11y-dyslexie__reset[disabled] {
   opacity: .6;
   cursor: not-allowed;
 }
@@ -568,13 +572,19 @@
 .a11y-dyslexie__controls.is-disabled {
   opacity: .6;
 }
-.a11y-dyslexie__field {
+.a11y-dyslexie__field { 
   display: grid;
   gap: 6px;
 }
 .a11y-dyslexie__field label {
   font-size: .95rem;
   font-weight: 600;
+}
+.a11y-dyslexie__field--range label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 .a11y-dyslexie__input {
   border: 1px solid var(--a11y-border);
@@ -592,6 +602,64 @@
   width: 64px;
   height: 40px;
   padding: 0;
+}
+.a11y-dyslexie__input--select {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 36px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, currentColor 50%),
+    linear-gradient(-45deg, transparent 50%, currentColor 50%);
+  background-position: right 16px center, right 10px center;
+  background-size: 8px 6px;
+  background-repeat: no-repeat;
+}
+.a11y-dyslexie__field--range {
+  grid-column: 1 / -1;
+}
+.a11y-dyslexie__range {
+  width: 100%;
+  accent-color: var(--a11y-text, #202124);
+}
+.a11y-dyslexie__value {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  margin-left: 8px;
+  font-size: .85rem;
+  font-weight: 600;
+  color: #333;
+}
+.a11y-dyslexie__help {
+  margin: 0;
+  font-size: .85rem;
+  color: #555;
+}
+.a11y-dyslexie__fieldset {
+  grid-column: 1 / -1;
+  border: 1px solid var(--a11y-border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  display: grid;
+  gap: 10px;
+  background: var(--a11y-surface);
+  margin: 0;
+}
+.a11y-dyslexie__legend {
+  font-size: .95rem;
+  font-weight: 600;
+  margin: 0;
+}
+.a11y-dyslexie__style-options {
+  display: grid;
+  gap: 8px;
+}
+.a11y-dyslexie__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
 }
 .a11y-dyslexie__field--checkbox {
   display: flex;
