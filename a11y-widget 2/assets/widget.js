@@ -512,6 +512,7 @@
     return cursorStyleElement;
   }
 
+  const CURSOR_ATTR_SELECTOR = 'html[data-a11y-moteur-curseur="on"]';
   const CURSOR_CLICKABLE_SELECTORS = [
     'a',
     'button',
@@ -527,7 +528,7 @@
     '[contenteditable="true"]',
     '[contenteditable=""]',
     '[contenteditable]'
-  ].join(', ');
+  ];
 
   function getCursorPayload(settings){
     const colorKey = normalizeCursorColor(settings.color);
@@ -554,18 +555,23 @@
     if(payload.sizeMultiplier === 1 && payload.colorKey === 'black'){
       return '';
     }
+    const scopeSelector = `${CURSOR_ATTR_SELECTOR} body`;
+    const clickableSelectors = CURSOR_CLICKABLE_SELECTORS.map(sel => `${scopeSelector} ${sel}`);
+    const sliderSelectors = [
+      `${scopeSelector} .a11y-cursor__slider`,
+      `${scopeSelector} .a11y-cursor__slider::-webkit-slider-thumb`,
+      `${scopeSelector} .a11y-cursor__slider::-moz-range-thumb`,
+      `${scopeSelector} .a11y-cursor__slider::-moz-range-track`,
+      `${scopeSelector} .a11y-cursor__option`
+    ];
+    const interactiveSelectors = clickableSelectors.concat(sliderSelectors).join(',\n');
     return `
-html[data-a11yMoteurCurseur="on"],
-html[data-a11yMoteurCurseur="on"] body,
-html[data-a11yMoteurCurseur="on"] body * {
+${CURSOR_ATTR_SELECTOR},
+${scopeSelector},
+${scopeSelector} * {
   cursor: ${defaultRule}, auto !important;
 }
-html[data-a11yMoteurCurseur="on"] body ${CURSOR_CLICKABLE_SELECTORS},
-html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider,
-html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider::-webkit-slider-thumb,
-html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider::-moz-range-thumb,
-html[data-a11yMoteurCurseur="on"] body .a11y-cursor__slider::-moz-range-track,
-html[data-a11yMoteurCurseur="on"] body .a11y-cursor__option {
+${interactiveSelectors} {
   cursor: ${interactiveRule}, pointer !important;
 }
 `; }
