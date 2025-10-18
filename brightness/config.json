@@ -1,0 +1,120 @@
+{
+  "name": "brightness",
+  "title": "Luminosité",
+  "description": "Modes d'affichage et filtres visuels pour réduire la fatigue oculaire",
+  "version": "1.0.0",
+  "author": "Accessibility Modular Plugin",
+  "category": "vision",
+  "icon": "💡",
+  "enabled": true,
+  "priority": 20,
+  "rgaa_criteria": [
+    "3.2",
+    "3.3",
+    "10.11"
+  ],
+  "conformity_level": "AAA",
+  "features": [
+    {
+      "id": "display_mode",
+      "label": "Mode d'affichage",
+      "type": "radio",
+      "default": "normal",
+      "options": [
+        {
+          "value": "normal",
+          "label": "Normal",
+          "description": "Affichage par défaut"
+        },
+        {
+          "value": "night",
+          "label": "Mode nuit",
+          "description": "Fond sombre, texte clair"
+        },
+        {
+          "value": "blue_light",
+          "label": "Lumière bleue",
+          "description": "Filtre chaud anti-lumière bleue"
+        },
+        {
+          "value": "high_contrast",
+          "label": "Contraste élevé",
+          "description": "Contraste maximum (AAA)"
+        },
+        {
+          "value": "low_contrast",
+          "label": "Contraste faible",
+          "description": "Contraste réduit"
+        },
+        {
+          "value": "grayscale",
+          "label": "Niveaux de gris",
+          "description": "Suppression des couleurs"
+        }
+      ]
+    },
+    {
+      "id": "contrast",
+      "label": "Contraste",
+      "type": "range",
+      "default": 100,
+      "min": 50,
+      "max": 200,
+      "step": 10,
+      "unit": "%",
+      "category": "advanced"
+    },
+    {
+      "id": "brightness",
+      "label": "Luminosité",
+      "type": "range",
+      "default": 100,
+      "min": 50,
+      "max": 150,
+      "step": 5,
+      "unit": "%",
+      "category": "advanced"
+    },
+    {
+      "id": "saturation",
+      "label": "Saturation",
+      "type": "range",
+      "default": 100,
+      "min": 0,
+      "max": 200,
+      "step": 10,
+      "unit": "%",
+      "category": "advanced"
+    }
+  ],
+  "cookies": [
+    "acc_brightness_mode",
+    "acc_brightness_contrast",
+    "acc_brightness_brightness",
+    "acc_brightness_saturation"
+  ],
+  "dependencies": [],
+  "performance": {
+    "weight": "8KB",
+    "execution_time": "< 5ms",
+    "browser_compatibility": "IE11+",
+    "gpu_acceleration": true
+  },
+  "accessibility": {
+    "keyboard_navigation": true,
+    "screen_reader_support": true,
+    "aria_labels": true,
+    "focus_management": true,
+    "wcag_contrast": {
+      "aa": true,
+      "aaa": true
+    }
+  },
+  "use_cases": [
+    "Malvoyance",
+    "Photosensibilité",
+    "Fatigue oculaire",
+    "Daltonisme",
+    "Utilisation nocturne"
+  ]
+}

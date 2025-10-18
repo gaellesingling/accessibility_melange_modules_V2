@@ -1,0 +1,470 @@
+/**
+ * Module Luminosité - CSS
+ * Styles pour les modes d'affichage
+ * Version: 1.0.2 - Boutons +/- ajoutés
+ */
+
+/* ===========================
+   STYLES DU MODULE
+   =========================== */
+
+/* Boutons de modes */
+.acc-brightness-modes {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.acc-brightness-mode {
+    padding: 12px 8px;
+    background: var(--acc-surface, #f8fafc);
+    border: 2px solid var(--acc-border, #e2e8f0);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--acc-text, #1e293b);
+}
+
+.acc-brightness-mode:hover {
+    background: white;
+    border-color: var(--acc-primary, #2563eb);
+    transform: translateY(-2px);
+}
+
+.acc-brightness-mode:focus {
+    outline: 2px solid var(--acc-primary, #2563eb);
+    outline-offset: 2px;
+}
+
+.acc-brightness-mode.active {
+    background: var(--acc-primary, #2563eb);
+    border-color: var(--acc-primary, #2563eb);
+    color: white;
+}
+
+.acc-mode-icon {
+    font-size: 24px;
+    line-height: 1;
+}
+
+.acc-mode-label {
+    text-align: center;
+    line-height: 1.2;
+}
+
+/* Réglages avancés */
+#acc-brightness-advanced summary {
+    font-weight: 500;
+    padding: 8px 0;
+}
+
+#acc-brightness-advanced summary:hover {
+    color: var(--acc-primary, #2563eb);
+}
+
+#acc-brightness-advanced[open] summary {
+    margin-bottom: 8px;
+}
+
+/* ===========================
+   SLIDERS AVEC BOUTONS +/-
+   =========================== */
+
+/* Conteneur du slider avec boutons */
+.acc-slider-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+/* Boutons +/- */
+.acc-slider-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    background: var(--acc-surface, #f8fafc);
+    border: 2px solid var(--acc-border, #e2e8f0);
+    border-radius: 6px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--acc-text, #1e293b);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    line-height: 1;
+}
+
+.acc-slider-btn:hover {
+    background: var(--acc-primary, #2563eb);
+    border-color: var(--acc-primary, #2563eb);
+    color: white;
+    transform: scale(1.05);
+}
+
+.acc-slider-btn:active {
+    transform: scale(0.95);
+}
+
+.acc-slider-btn:focus {
+    outline: 2px solid var(--acc-primary, #2563eb);
+    outline-offset: 2px;
+}
+
+.acc-slider-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.acc-slider-btn:disabled:hover {
+    background: var(--acc-surface, #f8fafc);
+    border-color: var(--acc-border, #e2e8f0);
+    color: var(--acc-text, #1e293b);
+    transform: none;
+}
+
+/* Le slider prend l'espace restant */
+.acc-slider-container .acc-slider {
+    flex: 1;
+    margin: 0;
+}
+
+/* Style du slider */
+.acc-slider {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--acc-border, #e2e8f0);
+    outline: none;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.acc-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--acc-primary, #2563eb);
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.acc-slider::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+.acc-slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--acc-primary, #2563eb);
+    cursor: pointer;
+    border: none;
+    transition: all 0.2s ease;
+}
+
+.acc-slider::-moz-range-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.2);
+}
+
+.acc-slider:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.3);
+}
+
+.acc-slider:focus::-moz-range-thumb {
+    box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.3);
+}
+
+/* ===========================
+   MODE NUIT - VERSION AMÉLIORÉE
+   =========================== */
+
+/* Approche intelligente : inversion des couleurs avec correction de teinte */
+body.acc-mode-night {
+    filter: invert(1) hue-rotate(180deg);
+    background-color: #1a1a1a;
+}
+
+/* Réinverse les images, vidéos et médias pour qu'ils restent naturels */
+body.acc-mode-night img,
+body.acc-mode-night video,
+body.acc-mode-night iframe,
+body.acc-mode-night picture,
+body.acc-mode-night canvas,
+body.acc-mode-night [style*="background-image"],
+body.acc-mode-night .acc-media-preserve {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Réinverse également le widget d'accessibilité pour qu'il reste lisible */
+body.acc-mode-night .acc-widget,
+body.acc-mode-night .acc-widget * {
+    filter: none;
+}
+
+/* Alternative : si vous préférez ne pas réinverser le widget */
+body.acc-mode-night .acc-panel {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Améliore le contraste des liens en mode nuit */
+body.acc-mode-night a {
+    color: #6eb5ff;
+    font-weight: 500;
+}
+
+body.acc-mode-night a:hover {
+    color: #a8d5ff;
+}
+
+/* Améliore la lisibilité des formulaires */
+body.acc-mode-night input,
+body.acc-mode-night textarea,
+body.acc-mode-night select {
+    opacity: 0.95;
+}
+
+/* Meilleur contraste pour les bordures */
+body.acc-mode-night *:not(img):not(video):not(canvas) {
+    border-color: rgba(255, 255, 255, 0.2) !important;
+}
+
+/* ===========================
+   MODE LUMIÈRE BLEUE
+   =========================== */
+body.acc-mode-blue-light {
+    filter: sepia(90%) hue-rotate(-10deg);
+}
+
+body.acc-mode-blue-light .acc-widget {
+    filter: none;
+}
+
+/* ===========================
+   MODE CONTRASTE ÉLEVÉ
+   =========================== */
+body.acc-mode-high-contrast {
+    filter: contrast(200%);
+}
+
+body.acc-mode-high-contrast * {
+    text-shadow: none !important;
+    box-shadow: none !important;
+}
+
+body.acc-mode-high-contrast a {
+    text-decoration: underline !important;
+    font-weight: bold !important;
+}
+
+body.acc-mode-high-contrast button,
+body.acc-mode-high-contrast input,
+body.acc-mode-high-contrast select,
+body.acc-mode-high-contrast textarea {
+    border: 2px solid currentColor !important;
+}
+
+body.acc-mode-high-contrast .acc-widget {
+    filter: none;
+}
+
+/* ===========================
+   MODE CONTRASTE FAIBLE
+   =========================== */
+body.acc-mode-low-contrast {
+    filter: contrast(70%);
+}
+
+body.acc-mode-low-contrast .acc-widget {
+    filter: none;
+}
+
+/* ===========================
+   MODE NIVEAUX DE GRIS
+   =========================== */
+body.acc-mode-grayscale {
+    filter: grayscale(100%);
+}
+
+body.acc-mode-grayscale .acc-widget {
+    filter: none;
+}
+
+/* ===========================
+   TRANSITIONS
+   =========================== */
+body {
+    transition: background-color 0.3s ease, 
+                color 0.3s ease, 
+                filter 0.3s ease;
+}
+
+/* Désactive les transitions pour prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    body,
+    body * {
+        transition: none !important;
+    }
+}
+
+/* ===========================
+   PRINT STYLES
+   =========================== */
+@media print {
+    body.acc-mode-night,
+    body.acc-mode-blue-light,
+    body.acc-mode-high-contrast,
+    body.acc-mode-low-contrast,
+    body.acc-mode-grayscale {
+        filter: none !important;
+        background-color: white !important;
+        color: black !important;
+    }
+}
+
+/* ===========================
+   RESPONSIVE
+   =========================== */
+@media (max-width: 480px) {
+    .acc-brightness-modes {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    
+    .acc-mode-label {
+        font-size: 10px;
+    }
+    
+    /* Boutons +/- plus petits sur mobile */
+    .acc-slider-btn {
+        width: 28px;
+        height: 28px;
+        min-width: 28px;
+        font-size: 16px;
+    }
+    
+    .acc-slider-container {
+        gap: 6px;
+    }
+}
+
+/* ===========================
+   ACCESSIBILITÉ
+   =========================== */
+
+/* Focus visible pour tous les modes */
+body.acc-mode-night *:focus,
+body.acc-mode-high-contrast *:focus,
+body.acc-mode-low-contrast *:focus,
+body.acc-mode-grayscale *:focus {
+    outline: 3px solid #ffd700 !important;
+    outline-offset: 2px !important;
+}
+
+/* Focus en mode nuit - couleur inversée */
+body.acc-mode-night *:focus {
+    outline-color: #0066ff !important;
+}
+
+/* Sélection de texte visible */
+body.acc-mode-night ::selection {
+    background-color: #4a9eff;
+    color: white;
+}
+
+body.acc-mode-high-contrast ::selection {
+    background-color: yellow;
+    color: black;
+}
+
+/* ===========================
+   COMPATIBILITÉ
+   =========================== */
+
+/* Support pour les anciens navigateurs */
+@supports not (filter: contrast(100%)) {
+    body.acc-mode-night {
+        /* Fallback : mode sombre classique */
+        background-color: #1a1a1a !important;
+        color: #f5f5f5 !important;
+        filter: none;
+    }
+    
+    body.acc-mode-night * {
+        background-color: inherit;
+        color: inherit;
+    }
+    
+    body.acc-mode-high-contrast {
+        /* Fallback pour navigateurs sans support filter */
+        font-weight: 600;
+    }
+    
+    body.acc-mode-grayscale {
+        /* Fallback */
+        opacity: 0.9;
+    }
+}
+
+/* ===========================
+   PRÉFÉRENCES SYSTÈME
+   =========================== */
+
+/* Respecte la préférence système pour le mode sombre */
+@media (prefers-color-scheme: dark) {
+    body.acc-mode-night {
+        /* Déjà en mode sombre optimisé */
+    }
+}
+
+/* Respecte la préférence de contraste */
+@media (prefers-contrast: high) {
+    body.acc-mode-high-contrast * {
+        border-width: 2px !important;
+    }
+}
+
+/* ===========================
+   OPTIMISATIONS PERFORMANCE
+   =========================== */
+
+/* Accélération GPU pour les filtres */
+body.acc-mode-night,
+body.acc-mode-blue-light,
+body.acc-mode-high-contrast,
+body.acc-mode-low-contrast,
+body.acc-mode-grayscale {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+}
+
+/* ===========================
+   CAS SPÉCIAUX
+   =========================== */
+
+/* Préserve les logos et icônes importants */
+body.acc-mode-night .logo,
+body.acc-mode-night .icon-preserve,
+body.acc-mode-night [data-preserve-colors] {
+    filter: invert(1) hue-rotate(180deg);
+}
+
+/* Préserve les graphiques et charts */
+body.acc-mode-night svg:not(.icon),
+body.acc-mode-night .chart,
+body.acc-mode-night .graph {
+    filter: invert(1) hue-rotate(180deg);
+}
