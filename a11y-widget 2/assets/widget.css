@@ -15,6 +15,7 @@
   --a11y-z-panel: 2147483647; /* top */
   --a11y-launcher-x: calc(100vw - 76px);
   --a11y-launcher-y: calc(100vh - 76px);
+  --a11y-brightness-filter: none;
 }
 
 /* Button (launcher) */
@@ -551,9 +552,9 @@
   box-shadow: none;
 }
 
-[data-a11y-preserve-colors] {
-  filter: var(--a11y-brightness-ui-filter, none);
-  transition: filter 0.25s ease;
+[data-a11y-luminosite-reglages="on"] body > :not([data-a11y-filter-exempt]) {
+  filter: var(--a11y-brightness-filter, none);
+  transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease;
 }
 .a11y-buttons__header {
   display: flex;

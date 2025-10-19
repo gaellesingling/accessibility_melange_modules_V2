@@ -108,7 +108,6 @@
     { key: 'low_contrast', icon: '⬜', labelKey: 'mode_low_contrast_label', ariaKey: 'mode_low_contrast_aria' },
     { key: 'grayscale', icon: '◧', labelKey: 'mode_grayscale_label', ariaKey: 'mode_grayscale_aria' },
   ];
-  const BRIGHTNESS_UI_FILTER_VAR = '--a11y-brightness-ui-filter';
   const BRIGHTNESS_SLIDER_CONFIG = {
     contrast: { min: 50, max: 200, step: 10 },
     brightness: { min: 50, max: 150, step: 5 },
@@ -970,153 +969,9 @@ ${interactiveSelectors} {
     return parts.join(' ');
   }
 
-  function formatFilterPercent(value){
-    const numeric = Number(value);
-    if(!Number.isFinite(numeric) || numeric <= 0){ return 100; }
-    const clamped = Math.min(Math.max(numeric, 10), 1000);
-    return Math.round(clamped * 100) / 100;
-  }
-
-  function buildInverseFilterToken(name, rawValue){
-    const value = typeof rawValue === 'string' ? rawValue.trim() : '';
-    switch(name){
-      case 'invert':
-        return value === '0' ? '' : 'invert(1)';
-      case 'hue-rotate': {
-        const parsed = parseFloat(value);
-        if(!Number.isFinite(parsed)){ return ''; }
-        const unit = value.toLowerCase().includes('rad') ? 'rad' : 'deg';
-        if(unit === 'rad'){
-          const inverse = -parsed;
-          return `hue-rotate(${inverse}rad)`;
-        }
-        let inverse = -parsed;
-        inverse = ((inverse % 360) + 360) % 360;
-        if(inverse > 180){ inverse -= 360; }
-        if(Math.abs(inverse) < 1e-6){ inverse = 0; }
-        const rounded = Math.round(inverse * 1000) / 1000;
-        return `hue-rotate(${rounded}deg)`;
-      }
-      case 'contrast': {
-        if(value.endsWith('%')){
-          const numeric = parseFloat(value);
-          if(Number.isFinite(numeric) && numeric !== 0){
-            const inverse = formatFilterPercent(10000 / numeric);
-            return `contrast(${inverse}%)`;
-          }
-        } else {
-          const numeric = parseFloat(value);
-          if(Number.isFinite(numeric) && numeric !== 0){
-            const inverse = Math.round((1 / numeric) * 1000) / 1000;
-            return `contrast(${inverse})`;
-          }
-        }
-        return '';
-      }
-      case 'brightness': {
-        if(value.endsWith('%')){
-          const numeric = parseFloat(value);
-          if(Number.isFinite(numeric) && numeric !== 0){
-            const inverse = formatFilterPercent(10000 / numeric);
-            return `brightness(${inverse}%)`;
-          }
-        } else {
-          const numeric = parseFloat(value);
-          if(Number.isFinite(numeric) && numeric !== 0){
-            const inverse = Math.round((1 / numeric) * 1000) / 1000;
-            return `brightness(${inverse})`;
-          }
-        }
-        return '';
-      }
-      case 'saturate': {
-        if(value.endsWith('%')){
-          const numeric = parseFloat(value);
-          if(Number.isFinite(numeric) && numeric !== 0){
-            const inverse = formatFilterPercent(10000 / numeric);
-            return `saturate(${inverse}%)`;
-          }
-        } else {
-          const numeric = parseFloat(value);
-          if(Number.isFinite(numeric) && numeric !== 0){
-            const inverse = Math.round((1 / numeric) * 1000) / 1000;
-            return `saturate(${inverse})`;
-          }
-        }
-        return '';
-      }
-      default:
-        return '';
-    }
-  }
-
-  function buildInverseFilterString(filterValue){
-    if(!filterValue || typeof filterValue !== 'string'){ return ''; }
-    const tokens = [];
-    const regex = /([a-z-]+)\(([^)]+)\)/gi;
-    let match;
-    while((match = regex.exec(filterValue))){
-      tokens.push({ name: match[1].toLowerCase(), value: match[2] });
-    }
-    if(!tokens.length){ return ''; }
-    const parts = [];
-    for(let i = tokens.length - 1; i >= 0; i--){
-      const token = tokens[i];
-      const inverse = buildInverseFilterToken(token.name, token.value);
-      if(inverse){ parts.push(inverse); }
-    }
-    return parts.join(' ');
-  }
-
-  function getBrightnessModeCompensation(mode){
-    return buildInverseFilterString(BRIGHTNESS_MODE_FILTERS[mode] || '');
-  }
-
-  function buildBrightnessInverseAdjustments(settings){
-    const parts = [];
-    const saturation = clampBrightnessSaturation(settings.saturation);
-    if(saturation !== 100){
-      const inverse = formatFilterPercent(10000 / saturation);
-      parts.push(`saturate(${inverse}%)`);
-    }
-    const lightness = clampBrightnessLevel(settings.brightness);
-    if(lightness !== 100){
-      const inverse = formatFilterPercent(10000 / lightness);
-      parts.push(`brightness(${inverse}%)`);
-    }
-    const contrast = clampBrightnessContrast(settings.contrast);
-    if(contrast !== 100){
-      const inverse = formatFilterPercent(10000 / contrast);
-      parts.push(`contrast(${inverse}%)`);
-    }
-    return parts.join(' ');
-  }
-
-  function applyBrightnessUiFilter(){
-    const root = document.documentElement;
-    if(!root){ return; }
-    if(!brightnessActive){
-      root.style.removeProperty(BRIGHTNESS_UI_FILTER_VAR);
-      return;
-    }
-    const mode = normalizeBrightnessMode(brightnessSettings.mode);
-    const parts = [];
-    const inverseAdjustments = buildBrightnessInverseAdjustments(brightnessSettings);
-    if(inverseAdjustments){ parts.push(inverseAdjustments); }
-    const modeCompensation = getBrightnessModeCompensation(mode);
-    if(modeCompensation){ parts.push(modeCompensation); }
-    const value = parts.join(' ');
-    if(value){
-      root.style.setProperty(BRIGHTNESS_UI_FILTER_VAR, value);
-    } else {
-      root.style.removeProperty(BRIGHTNESS_UI_FILTER_VAR);
-    }
-  }
-
   function updateBrightnessFilter(){
     if(!brightnessActive){
       if(brightnessStyleElement){ brightnessStyleElement.textContent = ''; }
-      applyBrightnessUiFilter();
       return;
     }
     const styleEl = ensureBrightnessStyleElement();
@@ -1124,8 +979,12 @@ ${interactiveSelectors} {
     const adjustments = buildBrightnessFilter(brightnessSettings);
     const combined = [baseFilter, adjustments].filter(Boolean).join(' ');
     const filterValue = combined || 'none';
-    styleEl.textContent = `[data-a11y-${BRIGHTNESS_SLUG}="on"] body { filter: ${filterValue}; transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`;
-    applyBrightnessUiFilter();
+    const selectorPrefix = `[data-a11y-${BRIGHTNESS_SLUG}="on"]`;
+    const rules = [
+      `${selectorPrefix} body { --a11y-brightness-filter: ${filterValue}; }`,
+      `${selectorPrefix} body > :not([data-a11y-filter-exempt]) { filter: var(--a11y-brightness-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
+    ];
+    styleEl.textContent = rules.join('\n');
   }
 
   function pruneBrightnessInstances(){
