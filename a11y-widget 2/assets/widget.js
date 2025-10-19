@@ -92,6 +92,14 @@
     low_contrast: 'acc-mode-low-contrast',
     grayscale: 'acc-mode-grayscale',
   };
+  const BRIGHTNESS_MODE_FILTERS = {
+    normal: '',
+    night: 'invert(1) hue-rotate(180deg)',
+    blue_light: 'sepia(90%) hue-rotate(-10deg)',
+    high_contrast: 'contrast(200%)',
+    low_contrast: 'contrast(70%)',
+    grayscale: 'grayscale(100%)',
+  };
   const BRIGHTNESS_MODE_CONFIG = [
     { key: 'normal', icon: '☀️', labelKey: 'mode_normal_label', ariaKey: 'mode_normal_aria' },
     { key: 'night', icon: '🌙', labelKey: 'mode_night_label', ariaKey: 'mode_night_aria' },
@@ -964,17 +972,13 @@ ${interactiveSelectors} {
   function updateBrightnessFilter(){
     if(!brightnessActive){
       if(brightnessStyleElement){ brightnessStyleElement.textContent = ''; }
-      document.documentElement.style.removeProperty('--a11y-brightness-filter');
       return;
     }
-    const filter = buildBrightnessFilter(brightnessSettings);
-    if(filter){
-      document.documentElement.style.setProperty('--a11y-brightness-filter', filter);
-    } else {
-      document.documentElement.style.removeProperty('--a11y-brightness-filter');
-    }
     const styleEl = ensureBrightnessStyleElement();
-    const filterValue = filter ? 'var(--a11y-brightness-filter)' : 'none';
+    const baseFilter = BRIGHTNESS_MODE_FILTERS[normalizeBrightnessMode(brightnessSettings.mode)] || '';
+    const adjustments = buildBrightnessFilter(brightnessSettings);
+    const combined = [baseFilter, adjustments].filter(Boolean).join(' ');
+    const filterValue = combined || 'none';
     styleEl.textContent = `[data-a11y-${BRIGHTNESS_SLUG}="on"] body { filter: ${filterValue}; transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`;
   }
 
@@ -1110,6 +1114,7 @@ ${interactiveSelectors} {
     brightnessSettings.mode = next;
     if(changed || options.force){
       applyBrightnessMode();
+      updateBrightnessFilter();
       syncBrightnessInstances();
       if(options.persist !== false){ persistBrightnessSettings(); }
     } else if(options.syncOnly){
