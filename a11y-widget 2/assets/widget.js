@@ -26,9 +26,10 @@
   }
 
   // ---------- Elements ----------
+  const root = document.getElementById('a11y-widget-root');
   const btn = document.getElementById('a11y-launcher');
   const overlay = document.getElementById('a11y-overlay');
-  const panel = overlay ? overlay.querySelector('.a11y-panel') : null;
+  const panel = root ? root.querySelector('.a11y-panel') : null;
   const closeBtn = document.getElementById('a11y-close');
   const closeBtn2 = document.getElementById('a11y-close2');
   const resetBtn = document.getElementById('a11y-reset');
@@ -178,14 +179,14 @@
   const BUTTONS_ATTR_SELECTOR = 'html[data-a11y-moteur-boutons="on"]';
   const BUTTONS_CONTAINER_SELECTORS = ['main', '#content', '.site-content', '.entry-content'];
   const BUTTONS_BUTTON_SELECTORS = [
-    '.wp-block-button__link:not(#a11y-overlay *)',
-    '.wp-element-button:not(#a11y-overlay *)',
-    'button:not(#a11y-overlay button)',
-    '.button:not(#a11y-overlay .button)',
-    '.btn:not(#a11y-overlay .btn)',
-    'input[type="submit"]:not(#a11y-overlay input)',
-    'input[type="button"]:not(#a11y-overlay input)',
-    'input[type="reset"]:not(#a11y-overlay input)'
+    '.wp-block-button__link:not(#a11y-overlay *):not(#a11y-widget-root *)',
+    '.wp-element-button:not(#a11y-overlay *):not(#a11y-widget-root *)',
+    'button:not(#a11y-overlay button):not(#a11y-widget-root button)',
+    '.button:not(#a11y-overlay .button):not(#a11y-widget-root .button)',
+    '.btn:not(#a11y-overlay .btn):not(#a11y-widget-root .btn)',
+    'input[type="submit"]:not(#a11y-overlay input):not(#a11y-widget-root input)',
+    'input[type="button"]:not(#a11y-overlay input):not(#a11y-widget-root input)',
+    'input[type="reset"]:not(#a11y-overlay input):not(#a11y-widget-root input)'
   ];
   const BUTTONS_TARGET_LIST = (() => {
     const combos = [];
@@ -942,20 +943,18 @@ ${interactiveSelectors} {
   }
 
   function clearBrightnessModeClasses(){
-    const body = document.body;
-    if(!body){ return; }
+    if(!overlay){ return; }
     Object.values(BRIGHTNESS_MODE_CLASSES).forEach(className => {
-      if(className){ body.classList.remove(className); }
+      if(className){ overlay.classList.remove(className); }
     });
   }
 
   function applyBrightnessMode(){
-    const body = document.body;
-    if(!body){ return; }
+    if(!overlay){ return; }
     clearBrightnessModeClasses();
     if(!brightnessActive){ return; }
     const className = BRIGHTNESS_MODE_CLASSES[normalizeBrightnessMode(brightnessSettings.mode)];
-    if(className){ body.classList.add(className); }
+    if(className){ overlay.classList.add(className); }
   }
 
   function buildBrightnessFilter(settings){
@@ -983,6 +982,7 @@ ${interactiveSelectors} {
     const rules = [
       `${selectorPrefix} body { --a11y-brightness-filter: ${filterValue}; }`,
       `${selectorPrefix} body > :not([data-a11y-filter-exempt]) { filter: var(--a11y-brightness-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
+      `${selectorPrefix} #a11y-overlay { --a11y-brightness-filter: ${filterValue}; filter: var(--a11y-brightness-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
     ];
     styleEl.textContent = rules.join('\n');
   }
@@ -1772,7 +1772,7 @@ ${interactiveSelectors} {
     const parent = node.parentNode;
     if(parent.nodeType !== Node.ELEMENT_NODE){ return true; }
     if(!node.nodeValue || !node.nodeValue.trim()){ return true; }
-    if(parent.closest && (parent.closest('#a11y-overlay') || parent.closest('#a11y-launcher'))){
+    if(parent.closest && (parent.closest('#a11y-overlay') || parent.closest('#a11y-widget-root') || parent.closest('#a11y-launcher'))){
       return true;
     }
     const tag = parent.tagName;
@@ -3229,27 +3229,37 @@ ${interactiveSelectors} {
   // ---------- Focus trap ----------
   let lastFocused = null;
   function openPanel(){
+    if(!panel){ return; }
     lastFocused = document.activeElement;
-    overlay.setAttribute('aria-hidden','false');
+    if(overlay){ overlay.setAttribute('aria-hidden','false'); }
+    panel.hidden = false;
+    panel.setAttribute('aria-hidden', 'false');
+    if(root){ root.classList.add('is-open'); }
     document.body.style.overflow = 'hidden';
-    btn.setAttribute('aria-expanded','true');
+    if(btn){ btn.setAttribute('aria-expanded','true'); }
     // focus premier focusable
-    const focusables = overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+    const focusables = panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])');
     for (const el of focusables){ if(!el.hasAttribute('disabled') && el.offsetParent !== null){ el.focus(); break; } }
-    overlay.addEventListener('keydown', trap, true);
+    panel.addEventListener('keydown', trap, true);
   }
   function closePanel(){
     disableSearchMode();
-    overlay.setAttribute('aria-hidden','true');
+    if(overlay){ overlay.setAttribute('aria-hidden','true'); }
+    if(panel){
+      panel.setAttribute('aria-hidden', 'true');
+      panel.hidden = true;
+      panel.removeEventListener('keydown', trap, true);
+    }
+    if(root){ root.classList.remove('is-open'); }
     document.body.style.overflow = '';
-    btn.setAttribute('aria-expanded','false');
-    overlay.removeEventListener('keydown', trap, true);
+    if(btn){ btn.setAttribute('aria-expanded','false'); }
     if(lastFocused && lastFocused.focus) lastFocused.focus();
   }
   function trap(e){
     if(e.key === 'Escape'){ e.preventDefault(); closePanel(); return; }
     if(e.key !== 'Tab') return;
-    const focusables = Array.from(overlay.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el=>!el.hasAttribute('disabled') && el.offsetParent !== null);
+    if(!panel){ return; }
+    const focusables = Array.from(panel.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter(el=>!el.hasAttribute('disabled') && el.offsetParent !== null);
     if(!focusables.length) return;
     const first = focusables[0];
     const last = focusables[focusables.length-1];
@@ -3423,20 +3433,39 @@ document.addEventListener('click', function(e){
   const launcher = e.target.closest && e.target.closest('#a11y-launcher');
   const close1 = e.target.closest && e.target.closest('#a11y-close');
   const close2 = e.target.closest && e.target.closest('#a11y-close2');
+  const rootEl = document.getElementById('a11y-widget-root');
   const overlayEl = document.getElementById('a11y-overlay');
-  if(!overlayEl) return;
-  function open(){ overlayEl.setAttribute('aria-hidden','false'); document.body.style.overflow='hidden'; }
+  if(!overlayEl || !rootEl) return;
+  const launcherBtn = document.getElementById('a11y-launcher');
+  function getPanel(){ return rootEl.querySelector('.a11y-panel'); }
+  function open(){
+    overlayEl.setAttribute('aria-hidden','false');
+    const panelEl = getPanel();
+    if(panelEl){
+      panelEl.hidden = false;
+      panelEl.setAttribute('aria-hidden', 'false');
+    }
+    rootEl.classList.add('is-open');
+    document.body.style.overflow='hidden';
+    if(launcherBtn){ launcherBtn.setAttribute('aria-expanded','true'); }
+  }
   function close(){
     overlayEl.setAttribute('aria-hidden','true');
     document.body.style.overflow='';
-    const panelEl = overlayEl.querySelector('.a11y-panel');
-    if(panelEl){ panelEl.classList.remove('is-searching'); }
-    const tablistEl = overlayEl.querySelector('[data-role="section-tablist"]');
+    if(launcherBtn){ launcherBtn.setAttribute('aria-expanded','false'); }
+    const panelEl = getPanel();
+    if(panelEl){
+      panelEl.classList.remove('is-searching');
+      panelEl.hidden = true;
+      panelEl.setAttribute('aria-hidden', 'true');
+    }
+    rootEl.classList.remove('is-open');
+    const tablistEl = panelEl ? panelEl.querySelector('[data-role="section-tablist"]') : null;
     if(tablistEl){
       tablistEl.removeAttribute('hidden');
       tablistEl.removeAttribute('aria-hidden');
     }
-    const resultsEl = overlayEl.querySelector('[data-role="search-results"]');
+    const resultsEl = panelEl ? panelEl.querySelector('[data-role="search-results"]') : null;
     if(resultsEl){
       resultsEl.hidden = true;
       resultsEl.setAttribute('aria-hidden','true');
