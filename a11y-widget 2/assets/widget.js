@@ -81,6 +81,44 @@
     else { panel.setAttribute('aria-hidden','false'); }
   });
 
+  const BRIGHTNESS_SLUG = 'luminosite-reglages';
+  const BRIGHTNESS_SETTINGS_KEY = 'a11y-widget-brightness-settings:v1';
+  const BRIGHTNESS_MODES = ['normal', 'night', 'blue_light', 'high_contrast', 'low_contrast', 'grayscale'];
+  const BRIGHTNESS_MODE_CLASSES = {
+    normal: '',
+    night: 'acc-mode-night',
+    blue_light: 'acc-mode-blue-light',
+    high_contrast: 'acc-mode-high-contrast',
+    low_contrast: 'acc-mode-low-contrast',
+    grayscale: 'acc-mode-grayscale',
+  };
+  const BRIGHTNESS_MODE_FILTERS = {
+    normal: '',
+    night: 'invert(1) hue-rotate(180deg)',
+    blue_light: 'sepia(90%) hue-rotate(-10deg)',
+    high_contrast: 'contrast(200%)',
+    low_contrast: 'contrast(70%)',
+    grayscale: 'grayscale(100%)',
+  };
+  const BRIGHTNESS_MODE_CONFIG = [
+    { key: 'normal', icon: '☀️', labelKey: 'mode_normal_label', ariaKey: 'mode_normal_aria' },
+    { key: 'night', icon: '🌙', labelKey: 'mode_night_label', ariaKey: 'mode_night_aria' },
+    { key: 'blue_light', icon: '🔶', labelKey: 'mode_blue_light_label', ariaKey: 'mode_blue_light_aria' },
+    { key: 'high_contrast', icon: '⬛', labelKey: 'mode_high_contrast_label', ariaKey: 'mode_high_contrast_aria' },
+    { key: 'low_contrast', icon: '⬜', labelKey: 'mode_low_contrast_label', ariaKey: 'mode_low_contrast_aria' },
+    { key: 'grayscale', icon: '◧', labelKey: 'mode_grayscale_label', ariaKey: 'mode_grayscale_aria' },
+  ];
+  const BRIGHTNESS_SLIDER_CONFIG = {
+    contrast: { min: 50, max: 200, step: 10 },
+    brightness: { min: 50, max: 150, step: 5 },
+    saturation: { min: 0, max: 200, step: 10 },
+  };
+  const brightnessInstances = new Set();
+  let brightnessSettings = loadBrightnessSettings();
+  let brightnessActive = false;
+  let brightnessStyleElement = null;
+  let brightnessIdCounter = 0;
+
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
   const DYSLEXIA_SETTINGS_KEY = 'a11y-widget-dyslexie-settings:v1';
   const DYSLEXIA_DEFAULT_COLOR = '#ffeb3b';
@@ -823,6 +861,660 @@ ${interactiveSelectors} {
       cursorStyleElement.textContent = '';
     }
     syncCursorInstances();
+  }
+
+  function getDefaultBrightnessSettings(){
+    return {
+      mode: 'normal',
+      contrast: 100,
+      brightness: 100,
+      saturation: 100,
+    };
+  }
+
+  function normalizeBrightnessMode(value){
+    if(typeof value !== 'string'){ return 'normal'; }
+    const normalized = value.toLowerCase().replace(/-/g, '_');
+    return BRIGHTNESS_MODES.includes(normalized) ? normalized : 'normal';
+  }
+
+  function clampBrightnessValue(value, config, fallback){
+    const numeric = Number(value);
+    if(Number.isFinite(numeric)){
+      const step = config.step || 0;
+      const stepped = step ? Math.round(numeric / step) * step : numeric;
+      const bounded = Math.min(config.max, Math.max(config.min, stepped));
+      return Math.round(bounded);
+    }
+    return fallback;
+  }
+
+  function clampBrightnessContrast(value){
+    return clampBrightnessValue(value, BRIGHTNESS_SLIDER_CONFIG.contrast, 100);
+  }
+
+  function clampBrightnessLevel(value){
+    return clampBrightnessValue(value, BRIGHTNESS_SLIDER_CONFIG.brightness, 100);
+  }
+
+  function clampBrightnessSaturation(value){
+    return clampBrightnessValue(value, BRIGHTNESS_SLIDER_CONFIG.saturation, 100);
+  }
+
+  function loadBrightnessSettings(){
+    const defaults = getDefaultBrightnessSettings();
+    try {
+      const raw = localStorage.getItem(BRIGHTNESS_SETTINGS_KEY);
+      if(!raw){ return Object.assign({}, defaults); }
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
+      return {
+        mode: normalizeBrightnessMode(parsed.mode),
+        contrast: clampBrightnessContrast(parsed.contrast),
+        brightness: clampBrightnessLevel(parsed.brightness),
+        saturation: clampBrightnessSaturation(parsed.saturation),
+      };
+    } catch(err){
+      return Object.assign({}, defaults);
+    }
+  }
+
+  function persistBrightnessSettings(){
+    const payload = {
+      mode: normalizeBrightnessMode(brightnessSettings.mode),
+      contrast: clampBrightnessContrast(brightnessSettings.contrast),
+      brightness: clampBrightnessLevel(brightnessSettings.brightness),
+      saturation: clampBrightnessSaturation(brightnessSettings.saturation),
+    };
+    try { localStorage.setItem(BRIGHTNESS_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
+  }
+
+  function ensureBrightnessStyleElement(){
+    if(brightnessStyleElement && brightnessStyleElement.isConnected){ return brightnessStyleElement; }
+    let el = document.getElementById('a11y-brightness-styles');
+    if(!el){
+      el = document.createElement('style');
+      el.id = 'a11y-brightness-styles';
+      document.head.appendChild(el);
+    }
+    brightnessStyleElement = el;
+    return el;
+  }
+
+  function clearBrightnessModeClasses(){
+    const body = document.body;
+    if(!body){ return; }
+    Object.values(BRIGHTNESS_MODE_CLASSES).forEach(className => {
+      if(className){ body.classList.remove(className); }
+    });
+  }
+
+  function applyBrightnessMode(){
+    const body = document.body;
+    if(!body){ return; }
+    clearBrightnessModeClasses();
+    if(!brightnessActive){ return; }
+    const className = BRIGHTNESS_MODE_CLASSES[normalizeBrightnessMode(brightnessSettings.mode)];
+    if(className){ body.classList.add(className); }
+  }
+
+  function buildBrightnessFilter(settings){
+    const parts = [];
+    const contrast = clampBrightnessContrast(settings.contrast);
+    const lightness = clampBrightnessLevel(settings.brightness);
+    const saturation = clampBrightnessSaturation(settings.saturation);
+    if(contrast !== 100){ parts.push(`contrast(${contrast}%)`); }
+    if(lightness !== 100){ parts.push(`brightness(${lightness}%)`); }
+    if(saturation !== 100){ parts.push(`saturate(${saturation}%)`); }
+    return parts.join(' ');
+  }
+
+  function updateBrightnessFilter(){
+    if(!brightnessActive){
+      if(brightnessStyleElement){ brightnessStyleElement.textContent = ''; }
+      return;
+    }
+    const styleEl = ensureBrightnessStyleElement();
+    const baseFilter = BRIGHTNESS_MODE_FILTERS[normalizeBrightnessMode(brightnessSettings.mode)] || '';
+    const adjustments = buildBrightnessFilter(brightnessSettings);
+    const combined = [baseFilter, adjustments].filter(Boolean).join(' ');
+    const filterValue = combined || 'none';
+    const selectorPrefix = `[data-a11y-${BRIGHTNESS_SLUG}="on"]`;
+    const rules = [
+      `${selectorPrefix} body { --a11y-brightness-filter: ${filterValue}; }`,
+      `${selectorPrefix} body > :not([data-a11y-filter-exempt]) { filter: var(--a11y-brightness-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
+    ];
+    styleEl.textContent = rules.join('\n');
+  }
+
+  function pruneBrightnessInstances(){
+    brightnessInstances.forEach(instance => {
+      if(!instance){
+        brightnessInstances.delete(instance);
+        return;
+      }
+      if(instance.wasConnected && (!instance.article || !instance.article.isConnected)){
+        brightnessInstances.delete(instance);
+      }
+    });
+  }
+
+  function updateBrightnessInstanceUI(instance){
+    if(!instance){ return; }
+    const {
+      article,
+      controls,
+      modesList,
+      modeButtons,
+      contrastSlider,
+      brightnessSlider,
+      saturationSlider,
+      contrastValue,
+      brightnessValue,
+      saturationValue,
+      contrastDecrease,
+      contrastIncrease,
+      brightnessDecrease,
+      brightnessIncrease,
+      saturationDecrease,
+      saturationIncrease,
+    } = instance;
+    const active = brightnessActive;
+    const mode = normalizeBrightnessMode(brightnessSettings.mode);
+    const contrast = clampBrightnessContrast(brightnessSettings.contrast);
+    const level = clampBrightnessLevel(brightnessSettings.brightness);
+    const saturation = clampBrightnessSaturation(brightnessSettings.saturation);
+
+    if(article){
+      if(article.isConnected){ instance.wasConnected = true; }
+      article.classList.toggle('is-disabled', !active);
+    }
+    if(controls){
+      controls.classList.toggle('is-disabled', !active);
+      if(!active){ controls.setAttribute('aria-disabled', 'true'); }
+      else { controls.removeAttribute('aria-disabled'); }
+    }
+    if(modesList){
+      if(!active){ modesList.setAttribute('aria-disabled', 'true'); }
+      else { modesList.removeAttribute('aria-disabled'); }
+    }
+    if(Array.isArray(modeButtons)){
+      modeButtons.forEach(({ button, mode: btnMode }) => {
+        if(!button){ return; }
+        const isCurrent = btnMode === mode && active;
+        button.classList.toggle('is-active', isCurrent);
+        button.setAttribute('aria-checked', isCurrent ? 'true' : 'false');
+        if(active){
+          button.disabled = false;
+          button.tabIndex = isCurrent ? 0 : -1;
+          button.removeAttribute('aria-disabled');
+        } else {
+          button.disabled = true;
+          button.tabIndex = -1;
+          button.setAttribute('aria-disabled', 'true');
+        }
+      });
+    }
+
+    const contrastCfg = BRIGHTNESS_SLIDER_CONFIG.contrast;
+    const brightnessCfg = BRIGHTNESS_SLIDER_CONFIG.brightness;
+    const saturationCfg = BRIGHTNESS_SLIDER_CONFIG.saturation;
+
+    if(contrastSlider){
+      contrastSlider.disabled = !active;
+      setInputValue(contrastSlider, String(contrast));
+      contrastSlider.setAttribute('aria-valuenow', String(contrast));
+      contrastSlider.setAttribute('aria-valuetext', `${contrast}%`);
+    }
+    if(contrastValue){ contrastValue.textContent = `${contrast}%`; }
+    if(contrastDecrease){ contrastDecrease.disabled = !active || contrast <= contrastCfg.min; }
+    if(contrastIncrease){ contrastIncrease.disabled = !active || contrast >= contrastCfg.max; }
+
+    if(brightnessSlider){
+      brightnessSlider.disabled = !active;
+      setInputValue(brightnessSlider, String(level));
+      brightnessSlider.setAttribute('aria-valuenow', String(level));
+      brightnessSlider.setAttribute('aria-valuetext', `${level}%`);
+    }
+    if(brightnessValue){ brightnessValue.textContent = `${level}%`; }
+    if(brightnessDecrease){ brightnessDecrease.disabled = !active || level <= brightnessCfg.min; }
+    if(brightnessIncrease){ brightnessIncrease.disabled = !active || level >= brightnessCfg.max; }
+
+    if(saturationSlider){
+      saturationSlider.disabled = !active;
+      setInputValue(saturationSlider, String(saturation));
+      saturationSlider.setAttribute('aria-valuenow', String(saturation));
+      saturationSlider.setAttribute('aria-valuetext', `${saturation}%`);
+    }
+    if(saturationValue){ saturationValue.textContent = `${saturation}%`; }
+    if(saturationDecrease){ saturationDecrease.disabled = !active || saturation <= saturationCfg.min; }
+    if(saturationIncrease){ saturationIncrease.disabled = !active || saturation >= saturationCfg.max; }
+  }
+
+  function syncBrightnessInstances(){
+    pruneBrightnessInstances();
+    brightnessInstances.forEach(instance => updateBrightnessInstanceUI(instance));
+  }
+
+  function setBrightnessActive(on){
+    const next = !!on;
+    if(brightnessActive === next){
+      if(next){ ensureBrightnessStyleElement(); }
+      applyBrightnessMode();
+      updateBrightnessFilter();
+      syncBrightnessInstances();
+      return;
+    }
+    brightnessActive = next;
+    if(next){ ensureBrightnessStyleElement(); }
+    applyBrightnessMode();
+    updateBrightnessFilter();
+    syncBrightnessInstances();
+  }
+
+  function setBrightnessMode(value, options = {}){
+    const next = normalizeBrightnessMode(value);
+    const current = normalizeBrightnessMode(brightnessSettings.mode);
+    const changed = current !== next;
+    brightnessSettings.mode = next;
+    if(changed || options.force){
+      applyBrightnessMode();
+      updateBrightnessFilter();
+      syncBrightnessInstances();
+      if(options.persist !== false){ persistBrightnessSettings(); }
+    } else if(options.syncOnly){
+      syncBrightnessInstances();
+    }
+  }
+
+  function setBrightnessContrast(value, options = {}){
+    const next = clampBrightnessContrast(value);
+    const current = clampBrightnessContrast(brightnessSettings.contrast);
+    const changed = current !== next;
+    brightnessSettings.contrast = next;
+    if(changed || options.force){
+      updateBrightnessFilter();
+      syncBrightnessInstances();
+      if(options.persist !== false){ persistBrightnessSettings(); }
+    } else if(options.syncOnly){
+      syncBrightnessInstances();
+    }
+  }
+
+  function setBrightnessLevel(value, options = {}){
+    const next = clampBrightnessLevel(value);
+    const current = clampBrightnessLevel(brightnessSettings.brightness);
+    const changed = current !== next;
+    brightnessSettings.brightness = next;
+    if(changed || options.force){
+      updateBrightnessFilter();
+      syncBrightnessInstances();
+      if(options.persist !== false){ persistBrightnessSettings(); }
+    } else if(options.syncOnly){
+      syncBrightnessInstances();
+    }
+  }
+
+  function setBrightnessSaturation(value, options = {}){
+    const next = clampBrightnessSaturation(value);
+    const current = clampBrightnessSaturation(brightnessSettings.saturation);
+    const changed = current !== next;
+    brightnessSettings.saturation = next;
+    if(changed || options.force){
+      updateBrightnessFilter();
+      syncBrightnessInstances();
+      if(options.persist !== false){ persistBrightnessSettings(); }
+    } else if(options.syncOnly){
+      syncBrightnessInstances();
+    }
+  }
+
+  function adjustBrightnessSetting(key, delta){
+    const step = Number(delta) || 0;
+    if(key === 'contrast'){
+      setBrightnessContrast(brightnessSettings.contrast + step, { force: true });
+    } else if(key === 'brightness'){
+      setBrightnessLevel(brightnessSettings.brightness + step, { force: true });
+    } else if(key === 'saturation'){
+      setBrightnessSaturation(brightnessSettings.saturation + step, { force: true });
+    }
+  }
+
+  function resetBrightnessSettings(options = {}){
+    brightnessSettings = getDefaultBrightnessSettings();
+    applyBrightnessMode();
+    updateBrightnessFilter();
+    syncBrightnessInstances();
+    if(options.persist !== false){
+      persistBrightnessSettings();
+    }
+  }
+
+  function handleBrightnessModeKeydown(event, instance, index){
+    if(!instance || !Array.isArray(instance.modeButtons) || !instance.modeButtons.length){ return; }
+    const buttons = instance.modeButtons.map(entry => entry && entry.button).filter(Boolean);
+    if(!buttons.length){ return; }
+    let targetIndex = null;
+    switch(event.key){
+      case 'ArrowRight':
+      case 'ArrowDown':
+        event.preventDefault();
+        targetIndex = (index + 1) % buttons.length;
+        break;
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        event.preventDefault();
+        targetIndex = (index - 1 + buttons.length) % buttons.length;
+        break;
+      case 'Home':
+        event.preventDefault();
+        targetIndex = 0;
+        break;
+      case 'End':
+        event.preventDefault();
+        targetIndex = buttons.length - 1;
+        break;
+      case ' ':
+      case 'Enter':
+        event.preventDefault();
+        if(instance.modeButtons[index]){
+          setBrightnessMode(instance.modeButtons[index].mode);
+        }
+        return;
+      default:
+        return;
+    }
+    if(targetIndex !== null){
+      const target = buttons[targetIndex];
+      if(target && !target.disabled){ target.focus(); }
+    }
+  }
+
+  function createBrightnessCard(feature){
+    if(!feature || typeof feature.slug !== 'string' || !feature.slug){ return null; }
+
+    const article = document.createElement('article');
+    article.className = 'a11y-card a11y-card--brightness';
+    article.setAttribute('data-role', 'feature-card');
+
+    const header = document.createElement('div');
+    header.className = 'a11y-brightness__header';
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.setAttribute('data-role', 'feature-meta');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = feature.label || '';
+    meta.appendChild(labelEl);
+
+    if(feature.hint){
+      const hintEl = document.createElement('span');
+      hintEl.className = 'hint';
+      hintEl.textContent = feature.hint;
+      meta.appendChild(hintEl);
+    }
+
+    header.appendChild(meta);
+
+    const switchEl = buildSwitch(feature.slug, feature.aria_label || feature.label || '');
+    if(switchEl){
+      switchEl.classList.add('a11y-brightness__switch');
+      header.appendChild(switchEl);
+    }
+
+    article.appendChild(header);
+
+    const controls = document.createElement('form');
+    controls.className = 'a11y-brightness__controls';
+    controls.setAttribute('data-role', 'brightness-controls');
+    controls.addEventListener('submit', event => { event.preventDefault(); });
+
+    const settings = feature.settings && typeof feature.settings === 'object' ? feature.settings : {};
+    const texts = {
+      modes_label: typeof settings.modes_label === 'string' ? settings.modes_label : '',
+      modes_hint: typeof settings.modes_hint === 'string' ? settings.modes_hint : '',
+      advanced_label: typeof settings.advanced_label === 'string' ? settings.advanced_label : '',
+      advanced_hint: typeof settings.advanced_hint === 'string' ? settings.advanced_hint : '',
+      contrast_label: typeof settings.contrast_label === 'string' ? settings.contrast_label : '',
+      contrast_decrease: typeof settings.contrast_decrease === 'string' ? settings.contrast_decrease : '',
+      contrast_increase: typeof settings.contrast_increase === 'string' ? settings.contrast_increase : '',
+      brightness_label: typeof settings.brightness_label === 'string' ? settings.brightness_label : '',
+      brightness_decrease: typeof settings.brightness_decrease === 'string' ? settings.brightness_decrease : '',
+      brightness_increase: typeof settings.brightness_increase === 'string' ? settings.brightness_increase : '',
+      saturation_label: typeof settings.saturation_label === 'string' ? settings.saturation_label : '',
+      saturation_decrease: typeof settings.saturation_decrease === 'string' ? settings.saturation_decrease : '',
+      saturation_increase: typeof settings.saturation_increase === 'string' ? settings.saturation_increase : '',
+      reset_label: typeof settings.reset_label === 'string' ? settings.reset_label : '',
+      reset_aria: typeof settings.reset_aria === 'string' ? settings.reset_aria : '',
+    };
+
+    const baseId = `a11y-brightness-${++brightnessIdCounter}`;
+
+    const modesGroup = document.createElement('div');
+    modesGroup.className = 'a11y-brightness__group';
+
+    const modesLabel = document.createElement('p');
+    modesLabel.className = 'a11y-brightness__label';
+    modesLabel.id = `${baseId}-modes-label`;
+    modesLabel.textContent = texts.modes_label || '';
+    modesGroup.appendChild(modesLabel);
+
+    let modesHintId = '';
+    if(texts.modes_hint){
+      const modesHint = document.createElement('p');
+      modesHint.className = 'a11y-brightness__hint';
+      modesHint.id = `${baseId}-modes-hint`;
+      modesHint.textContent = texts.modes_hint;
+      modesGroup.appendChild(modesHint);
+      modesHintId = modesHint.id;
+    }
+
+    const modesList = document.createElement('div');
+    modesList.className = 'a11y-brightness__modes';
+    modesList.setAttribute('role', 'radiogroup');
+    modesList.setAttribute('aria-labelledby', modesLabel.id);
+    if(modesHintId){ modesList.setAttribute('aria-describedby', modesHintId); }
+
+    const modeButtons = [];
+    BRIGHTNESS_MODE_CONFIG.forEach(definition => {
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.className = 'a11y-brightness__mode';
+      button.dataset.mode = definition.key;
+      button.setAttribute('role', 'radio');
+      button.setAttribute('aria-checked', 'false');
+
+      const icon = document.createElement('span');
+      icon.className = 'a11y-brightness__mode-icon';
+      icon.setAttribute('aria-hidden', 'true');
+      icon.textContent = definition.icon;
+      button.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'a11y-brightness__mode-label';
+      const labelText = typeof settings[definition.labelKey] === 'string' ? settings[definition.labelKey] : definition.key;
+      label.textContent = labelText;
+      button.appendChild(label);
+
+      const aria = typeof settings[definition.ariaKey] === 'string' ? settings[definition.ariaKey] : labelText;
+      if(aria){ button.setAttribute('aria-label', aria); }
+
+      button.addEventListener('click', () => setBrightnessMode(definition.key));
+
+      modeButtons.push({ button, mode: definition.key });
+      modesList.appendChild(button);
+    });
+
+    modesGroup.appendChild(modesList);
+    controls.appendChild(modesGroup);
+
+    const advanced = document.createElement('details');
+    advanced.className = 'a11y-brightness__advanced';
+
+    const summary = document.createElement('summary');
+    summary.className = 'a11y-brightness__summary';
+    summary.textContent = texts.advanced_label || '';
+    advanced.appendChild(summary);
+
+    if(texts.advanced_hint){
+      const advancedHint = document.createElement('p');
+      advancedHint.className = 'a11y-brightness__hint';
+      advancedHint.textContent = texts.advanced_hint;
+      advanced.appendChild(advancedHint);
+    }
+
+    const advancedContent = document.createElement('div');
+    advancedContent.className = 'a11y-brightness__advanced-content';
+    const advancedContentId = `${baseId}-advanced`;
+    advancedContent.id = advancedContentId;
+    advancedContent.setAttribute('role', 'group');
+    const advancedLabel = texts.advanced_label || '';
+    if(advancedLabel){
+      advancedContent.setAttribute('aria-label', advancedLabel);
+    }
+    advanced.appendChild(advancedContent);
+
+    summary.setAttribute('aria-controls', advancedContentId);
+    summary.setAttribute('aria-expanded', advanced.open ? 'true' : 'false');
+    advanced.addEventListener('toggle', () => {
+      summary.setAttribute('aria-expanded', advanced.open ? 'true' : 'false');
+    });
+
+    function buildSlider(key, labelText, decreaseText, increaseText){
+      const config = BRIGHTNESS_SLIDER_CONFIG[key];
+      const field = document.createElement('div');
+      field.className = 'a11y-brightness__group a11y-brightness__group--slider';
+
+      const label = document.createElement('label');
+      const fieldId = `${baseId}-${key}`;
+      label.setAttribute('for', fieldId);
+      label.className = 'a11y-brightness__label';
+      label.textContent = labelText || '';
+      const valueSpan = document.createElement('span');
+      valueSpan.className = 'a11y-brightness__value';
+      valueSpan.setAttribute('role', 'status');
+      valueSpan.setAttribute('aria-live', 'polite');
+      label.appendChild(valueSpan);
+      field.appendChild(label);
+
+      const sliderRow = document.createElement('div');
+      sliderRow.className = 'a11y-brightness__slider';
+
+      const decreaseBtn = document.createElement('button');
+      decreaseBtn.type = 'button';
+      decreaseBtn.className = 'a11y-brightness__step a11y-brightness__step--decrease';
+      decreaseBtn.innerHTML = '<span aria-hidden="true">−</span>';
+      if(decreaseText){ decreaseBtn.setAttribute('aria-label', decreaseText); }
+      sliderRow.appendChild(decreaseBtn);
+
+      const range = document.createElement('input');
+      range.type = 'range';
+      range.id = fieldId;
+      range.className = 'a11y-brightness__range';
+      range.min = String(config.min);
+      range.max = String(config.max);
+      range.step = String(config.step);
+      if(labelText){ range.setAttribute('aria-label', labelText); }
+      range.setAttribute('aria-valuemin', String(config.min));
+      range.setAttribute('aria-valuemax', String(config.max));
+      sliderRow.appendChild(range);
+
+      const increaseBtn = document.createElement('button');
+      increaseBtn.type = 'button';
+      increaseBtn.className = 'a11y-brightness__step a11y-brightness__step--increase';
+      increaseBtn.innerHTML = '<span aria-hidden="true">+</span>';
+      if(increaseText){ increaseBtn.setAttribute('aria-label', increaseText); }
+      sliderRow.appendChild(increaseBtn);
+
+      field.appendChild(sliderRow);
+      return { field, range, valueSpan, decreaseBtn, increaseBtn };
+    }
+
+    const contrastControls = buildSlider('contrast', texts.contrast_label, texts.contrast_decrease, texts.contrast_increase);
+    const brightnessControls = buildSlider('brightness', texts.brightness_label, texts.brightness_decrease, texts.brightness_increase);
+    const saturationControls = buildSlider('saturation', texts.saturation_label, texts.saturation_decrease, texts.saturation_increase);
+
+    advancedContent.appendChild(contrastControls.field);
+    advancedContent.appendChild(brightnessControls.field);
+    advancedContent.appendChild(saturationControls.field);
+
+    controls.appendChild(advanced);
+
+    const actions = document.createElement('div');
+    actions.className = 'a11y-brightness__actions';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'a11y-brightness__reset';
+    const resetLabel = texts.reset_label || 'Réinitialiser';
+    resetBtn.textContent = resetLabel;
+    const resetAria = texts.reset_aria || resetLabel;
+    resetBtn.setAttribute('aria-label', resetAria);
+    actions.appendChild(resetBtn);
+
+    controls.appendChild(actions);
+    article.appendChild(controls);
+
+    const instance = {
+      article,
+      controls,
+      modesList,
+      modeButtons,
+      contrastSlider: contrastControls.range,
+      brightnessSlider: brightnessControls.range,
+      saturationSlider: saturationControls.range,
+      contrastValue: contrastControls.valueSpan,
+      brightnessValue: brightnessControls.valueSpan,
+      saturationValue: saturationControls.valueSpan,
+      contrastDecrease: contrastControls.decreaseBtn,
+      contrastIncrease: contrastControls.increaseBtn,
+      brightnessDecrease: brightnessControls.decreaseBtn,
+      brightnessIncrease: brightnessControls.increaseBtn,
+      saturationDecrease: saturationControls.decreaseBtn,
+      saturationIncrease: saturationControls.increaseBtn,
+      resetButton: resetBtn,
+      wasConnected: false,
+    };
+
+    modeButtons.forEach((entry, index) => {
+      if(entry && entry.button){
+        entry.button.addEventListener('keydown', event => handleBrightnessModeKeydown(event, instance, index));
+      }
+    });
+
+    contrastControls.range.addEventListener('input', () => setBrightnessContrast(contrastControls.range.value, { persist: false }));
+    contrastControls.range.addEventListener('change', () => setBrightnessContrast(contrastControls.range.value, { force: true }));
+    brightnessControls.range.addEventListener('input', () => setBrightnessLevel(brightnessControls.range.value, { persist: false }));
+    brightnessControls.range.addEventListener('change', () => setBrightnessLevel(brightnessControls.range.value, { force: true }));
+    saturationControls.range.addEventListener('input', () => setBrightnessSaturation(saturationControls.range.value, { persist: false }));
+    saturationControls.range.addEventListener('change', () => setBrightnessSaturation(saturationControls.range.value, { force: true }));
+
+    contrastControls.decreaseBtn.addEventListener('click', () => adjustBrightnessSetting('contrast', -BRIGHTNESS_SLIDER_CONFIG.contrast.step));
+    contrastControls.increaseBtn.addEventListener('click', () => adjustBrightnessSetting('contrast', BRIGHTNESS_SLIDER_CONFIG.contrast.step));
+    brightnessControls.decreaseBtn.addEventListener('click', () => adjustBrightnessSetting('brightness', -BRIGHTNESS_SLIDER_CONFIG.brightness.step));
+    brightnessControls.increaseBtn.addEventListener('click', () => adjustBrightnessSetting('brightness', BRIGHTNESS_SLIDER_CONFIG.brightness.step));
+    saturationControls.decreaseBtn.addEventListener('click', () => adjustBrightnessSetting('saturation', -BRIGHTNESS_SLIDER_CONFIG.saturation.step));
+    saturationControls.increaseBtn.addEventListener('click', () => adjustBrightnessSetting('saturation', BRIGHTNESS_SLIDER_CONFIG.saturation.step));
+
+    resetBtn.addEventListener('click', () => resetBrightnessSettings());
+
+    brightnessInstances.add(instance);
+    syncBrightnessInstances();
+
+    const markConnection = () => {
+      if(instance.article && instance.article.isConnected){
+        instance.wasConnected = true;
+      }
+    };
+    if(typeof requestAnimationFrame === 'function'){
+      requestAnimationFrame(markConnection);
+    } else {
+      setTimeout(markConnection, 0);
+    }
+
+    return article;
   }
 
   function loadDyslexiaSettings(){
@@ -2196,6 +2888,9 @@ ${interactiveSelectors} {
     if(template === 'dyslexie-highlighter'){
       return createDyslexiaCard(feature);
     }
+    if(template === 'brightness-settings'){
+      return createBrightnessCard(feature);
+    }
     if(template === 'button-settings'){
       return createButtonCard(feature);
     }
@@ -2615,6 +3310,11 @@ ${interactiveSelectors} {
   }
 
   // ---------- Wiring ----------
+  A11yAPI.registerFeature(BRIGHTNESS_SLUG, on => {
+    if(on){ ensureBrightnessStyleElement(); }
+    setBrightnessActive(on);
+  });
+
   A11yAPI.registerFeature(DYSLEXIA_SLUG, on => {
     setDyslexiaActive(on);
   });
@@ -2700,11 +3400,13 @@ ${interactiveSelectors} {
       try { localStorage.removeItem(PANEL_SIDE_KEY); } catch(err){}
       try { localStorage.removeItem(BUTTONS_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(CURSOR_SETTINGS_KEY); } catch(err){}
+      try { localStorage.removeItem(BRIGHTNESS_SETTINGS_KEY); } catch(err){}
       document.documentElement.style.removeProperty('--a11y-launcher-x');
       document.documentElement.style.removeProperty('--a11y-launcher-y');
       launcherLastPos = null;
       hasCustomLauncherPosition = false;
       applyPanelSide('right');
+      resetBrightnessSettings({ persist: false });
       resetButtonSettings({ persist: false });
       resetCursorSettings();
       setCursorActive(false);
