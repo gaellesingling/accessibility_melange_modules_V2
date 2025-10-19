@@ -1060,10 +1060,11 @@ ${interactiveSelectors} {
     }
     if(!tokens.length){ return ''; }
     const parts = [];
-    tokens.forEach(token => {
+    for(let i = tokens.length - 1; i >= 0; i--){
+      const token = tokens[i];
       const inverse = buildInverseFilterToken(token.name, token.value);
       if(inverse){ parts.push(inverse); }
-    });
+    }
     return parts.join(' ');
   }
 
@@ -1100,10 +1101,10 @@ ${interactiveSelectors} {
     }
     const mode = normalizeBrightnessMode(brightnessSettings.mode);
     const parts = [];
-    const modeCompensation = getBrightnessModeCompensation(mode);
-    if(modeCompensation){ parts.push(modeCompensation); }
     const inverseAdjustments = buildBrightnessInverseAdjustments(brightnessSettings);
     if(inverseAdjustments){ parts.push(inverseAdjustments); }
+    const modeCompensation = getBrightnessModeCompensation(mode);
+    if(modeCompensation){ parts.push(modeCompensation); }
     const value = parts.join(' ');
     if(value){
       root.style.setProperty(BRIGHTNESS_UI_FILTER_VAR, value);
