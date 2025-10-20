@@ -66,6 +66,109 @@ function a11y_widget_get_feature_layout_option_name() {
 }
 
 /**
+ * Default heading levels used by the reading guide summary.
+ *
+ * @return string[]
+ */
+function a11y_widget_get_reading_guide_heading_levels_default() {
+    return array( 'h2', 'h3' );
+}
+
+/**
+ * Option name helper for the reading guide heading levels.
+ *
+ * @return string
+ */
+function a11y_widget_get_reading_guide_heading_levels_option_name() {
+    return 'a11y_widget_reading_guide_heading_levels';
+}
+
+/**
+ * Sanitize the heading levels stored for the reading guide summary.
+ *
+ * @param mixed $input Raw input.
+ *
+ * @return string[]
+ */
+function a11y_widget_sanitize_heading_levels( $input ) {
+    if ( null === $input ) {
+        return a11y_widget_get_reading_guide_heading_levels_default();
+    }
+
+    if ( is_string( $input ) ) {
+        $input = preg_split( '/,/', $input );
+    }
+
+    if ( ! is_array( $input ) ) {
+        $input = array();
+    }
+
+    $valid     = array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' );
+    $sanitized = array();
+
+    foreach ( $input as $value ) {
+        if ( is_array( $value ) ) {
+            continue;
+        }
+
+        $value = strtolower( sanitize_key( $value ) );
+
+        if ( in_array( $value, $valid, true ) ) {
+            $sanitized[ $value ] = true;
+        }
+    }
+
+    $levels = array();
+
+    foreach ( $valid as $heading ) {
+        if ( isset( $sanitized[ $heading ] ) ) {
+            $levels[] = $heading;
+        }
+    }
+
+    if ( empty( $levels ) ) {
+        return a11y_widget_get_reading_guide_heading_levels_default();
+    }
+
+    return $levels;
+}
+
+/**
+ * Retrieve the sanitized list of heading levels for the reading guide summary.
+ *
+ * @return string[]
+ */
+function a11y_widget_get_reading_guide_heading_levels() {
+    $stored = get_option(
+        a11y_widget_get_reading_guide_heading_levels_option_name(),
+        a11y_widget_get_reading_guide_heading_levels_default()
+    );
+
+    return a11y_widget_sanitize_heading_levels( $stored );
+}
+
+/**
+ * Build the CSS selector used to target headings for the reading guide summary.
+ *
+ * @return string
+ */
+function a11y_widget_get_reading_guide_heading_selector() {
+    $levels = a11y_widget_get_reading_guide_heading_levels();
+
+    if ( empty( $levels ) ) {
+        $levels = a11y_widget_get_reading_guide_heading_levels_default();
+    }
+
+    $selectors = array();
+
+    foreach ( $levels as $level ) {
+        $selectors[] = 'main ' . $level;
+    }
+
+    return implode( ', ', $selectors );
+}
+
+/**
  * Retrieve the list of disabled features stored in the database.
  *
  * @return string[]
@@ -210,6 +313,16 @@ function a11y_widget_register_settings() {
             'default'           => array(),
         )
     );
+
+    register_setting(
+        'a11y_widget_settings',
+        a11y_widget_get_reading_guide_heading_levels_option_name(),
+        array(
+            'type'              => 'array',
+            'sanitize_callback' => 'a11y_widget_sanitize_heading_levels',
+            'default'           => a11y_widget_get_reading_guide_heading_levels_default(),
+        )
+    );
 }
 add_action( 'admin_init', 'a11y_widget_register_settings' );
 
@@ -270,6 +383,9 @@ function a11y_widget_render_admin_page() {
     $force_all_features   = a11y_widget_force_all_features_enabled();
     $force_all_option_key = a11y_widget_get_force_all_features_option_name();
     $layout_option_key    = a11y_widget_get_feature_layout_option_name();
+    $heading_option_key   = a11y_widget_get_reading_guide_heading_levels_option_name();
+    $heading_levels       = a11y_widget_get_reading_guide_heading_levels();
+    $available_headings   = array( 'h1', 'h2', 'h3', 'h4', 'h5', 'h6' );
     ?>
     <div class="wrap a11y-widget-admin">
         <h1><?php esc_html_e( 'Accessibilité RGAA', 'a11y-widget' ); ?></h1>
@@ -296,6 +412,26 @@ function a11y_widget_render_admin_page() {
                 <p class="description">
                     <?php esc_html_e( 'Lorsque cette option est active, toutes les fonctionnalités sont affichées et la personnalisation ci-dessous est ignorée.', 'a11y-widget' ); ?>
                 </p>
+            </fieldset>
+
+            <fieldset class="a11y-widget-admin-reading-guide">
+                <legend><?php esc_html_e( 'Guide de lecture : niveaux de titres', 'a11y-widget' ); ?></legend>
+                <p class="description">
+                    <?php esc_html_e( 'Choisissez les niveaux de titres inclus dans le sommaire automatique du guide de lecture.', 'a11y-widget' ); ?>
+                </p>
+                <div class="a11y-widget-admin-reading-guide__choices">
+                    <?php foreach ( $available_headings as $heading_level ) : ?>
+                        <label>
+                            <input
+                                type="checkbox"
+                                name="<?php echo esc_attr( $heading_option_key ); ?>[]"
+                                value="<?php echo esc_attr( $heading_level ); ?>"
+                                <?php checked( in_array( $heading_level, $heading_levels, true ) ); ?>
+                            />
+                            <?php echo esc_html( sprintf( __( 'Titres %s', 'a11y-widget' ), strtoupper( $heading_level ) ) ); ?>
+                        </label>
+                    <?php endforeach; ?>
+                </div>
             </fieldset>
 
             <p class="a11y-widget-admin__hint">

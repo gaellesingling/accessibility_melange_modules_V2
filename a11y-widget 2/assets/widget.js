@@ -343,9 +343,6 @@
     opacity: 0.65,
     height: 120,
     summaryEnabled: false,
-    summarySelector: '',
-    summaryContainer: '',
-    summaryTitle: '',
     syllableEnabled: false,
     syllableSelector: 'main p, main li',
     focusEnabled: false,
@@ -1834,15 +1831,6 @@ ${interactiveSelectors} {
       if(Object.prototype.hasOwnProperty.call(parsed, 'summaryEnabled')){
         result.summaryEnabled = !!parsed.summaryEnabled;
       }
-      if(Object.prototype.hasOwnProperty.call(parsed, 'summarySelector')){
-        result.summarySelector = typeof parsed.summarySelector === 'string' ? parsed.summarySelector : '';
-      }
-      if(Object.prototype.hasOwnProperty.call(parsed, 'summaryContainer')){
-        result.summaryContainer = typeof parsed.summaryContainer === 'string' ? parsed.summaryContainer : '';
-      }
-      if(Object.prototype.hasOwnProperty.call(parsed, 'summaryTitle')){
-        result.summaryTitle = typeof parsed.summaryTitle === 'string' ? parsed.summaryTitle : '';
-      }
       if(Object.prototype.hasOwnProperty.call(parsed, 'syllableEnabled')){
         result.syllableEnabled = !!parsed.syllableEnabled;
       }
@@ -1864,9 +1852,6 @@ ${interactiveSelectors} {
       opacity: clampReadingGuideOpacity(readingGuideSettings.opacity),
       height: clampReadingGuideHeight(readingGuideSettings.height),
       summaryEnabled: !!readingGuideSettings.summaryEnabled,
-      summarySelector: typeof readingGuideSettings.summarySelector === 'string' ? readingGuideSettings.summarySelector : '',
-      summaryContainer: typeof readingGuideSettings.summaryContainer === 'string' ? readingGuideSettings.summaryContainer : '',
-      summaryTitle: typeof readingGuideSettings.summaryTitle === 'string' ? readingGuideSettings.summaryTitle : '',
       syllableEnabled: !!readingGuideSettings.syllableEnabled,
       syllableSelector: typeof readingGuideSettings.syllableSelector === 'string' ? readingGuideSettings.syllableSelector : READING_GUIDE_DEFAULTS.syllableSelector,
       focusEnabled: !!readingGuideSettings.focusEnabled,
@@ -1931,8 +1916,6 @@ ${interactiveSelectors} {
   }
 
   function getReadingGuideHeadingSelector(){
-    const custom = typeof readingGuideSettings.summarySelector === 'string' ? readingGuideSettings.summarySelector.trim() : '';
-    if(custom){ return custom; }
     const fallback = getReadingGuideSelectorValue('headings');
     return fallback || READING_GUIDE_DEFAULT_SELECTORS.headings;
   }
@@ -2067,15 +2050,6 @@ ${interactiveSelectors} {
   }
 
   function resolveReadingGuideSummaryContainer(){
-    const customSelector = typeof readingGuideSettings.summaryContainer === 'string'
-      ? readingGuideSettings.summaryContainer.trim()
-      : '';
-    if(customSelector){
-      try {
-        const node = document.querySelector(customSelector);
-        if(node){ return node; }
-      } catch(err){ /* ignore invalid selector */ }
-    }
     const attrSelector = getReadingGuideAttributeSelector('tocAttribute');
     if(attrSelector){
       const node = document.querySelector(attrSelector);
@@ -2251,9 +2225,7 @@ ${interactiveSelectors} {
     if(!container){ return; }
     container.classList.add('a11y-reading-guide-summary');
     container.innerHTML = '';
-    const titleText = (typeof readingGuideSettings.summaryTitle === 'string' && readingGuideSettings.summaryTitle.trim())
-      ? readingGuideSettings.summaryTitle.trim()
-      : readingGuideTexts.summaryTitleFallback;
+    const titleText = readingGuideTexts.summaryTitleFallback;
     if(titleText){
       const title = document.createElement('h2');
       title.className = 'a11y-reading-guide-summary__title';
@@ -2460,9 +2432,6 @@ ${interactiveSelectors} {
       case 'focusEnabled':
         next = !!value;
         break;
-      case 'summarySelector':
-      case 'summaryContainer':
-      case 'summaryTitle':
       case 'syllableSelector':
         next = typeof value === 'string' ? value : '';
         break;
@@ -2480,7 +2449,7 @@ ${interactiveSelectors} {
         applyReadingGuideStyles();
         refreshReadingGuideOverlay();
       }
-      if(key === 'summaryEnabled' || key === 'summarySelector' || key === 'summaryContainer' || key === 'summaryTitle'){
+      if(key === 'summaryEnabled'){
         applyReadingGuideSummary();
       }
       if(key === 'syllableEnabled' || key === 'syllableSelector'){
@@ -2513,10 +2482,6 @@ ${interactiveSelectors} {
       heightSlider,
       heightValue,
       summaryToggle,
-      summaryAdvancedDetails,
-      summarySelectorInput,
-      summaryContainerInput,
-      summaryTitleInput,
       syllableToggle,
       syllableSelectorInput,
       focusToggle,
@@ -2557,31 +2522,6 @@ ${interactiveSelectors} {
     if(summaryToggle){
       summaryToggle.disabled = !active;
       setCheckboxState(summaryToggle, !!readingGuideSettings.summaryEnabled);
-    }
-    const summaryBaseDisabled = !active || !readingGuideSettings.summaryEnabled;
-    let summaryAdvancedEnabled = true;
-    if(summaryAdvancedDetails){
-      summaryAdvancedDetails.classList.toggle('is-disabled', summaryBaseDisabled);
-      if(summaryBaseDisabled){ summaryAdvancedDetails.setAttribute('data-disabled', 'true'); }
-      else { summaryAdvancedDetails.removeAttribute('data-disabled'); }
-      if(summaryBaseDisabled && summaryAdvancedDetails.open){ summaryAdvancedDetails.open = false; }
-      summaryAdvancedEnabled = summaryAdvancedDetails.open && !summaryBaseDisabled;
-    }
-    const summaryInputsDisabled = summaryBaseDisabled || !summaryAdvancedEnabled;
-    if(summarySelectorInput){
-      summarySelectorInput.disabled = summaryInputsDisabled;
-      setInputValue(summarySelectorInput, readingGuideSettings.summarySelector || '');
-      if(settings.summary_selector_placeholder){ summarySelectorInput.setAttribute('placeholder', settings.summary_selector_placeholder); }
-    }
-    if(summaryContainerInput){
-      summaryContainerInput.disabled = summaryInputsDisabled;
-      setInputValue(summaryContainerInput, readingGuideSettings.summaryContainer || '');
-      if(settings.summary_container_placeholder){ summaryContainerInput.setAttribute('placeholder', settings.summary_container_placeholder); }
-    }
-    if(summaryTitleInput){
-      summaryTitleInput.disabled = summaryInputsDisabled;
-      setInputValue(summaryTitleInput, readingGuideSettings.summaryTitle || '');
-      if(settings.summary_title_placeholder){ summaryTitleInput.setAttribute('placeholder', settings.summary_title_placeholder); }
     }
     if(syllableToggle){
       syllableToggle.disabled = !active;
@@ -2797,66 +2737,6 @@ ${interactiveSelectors} {
     summaryToggleWrap.appendChild(summaryToggleText);
     summarySection.appendChild(summaryToggleWrap);
 
-    const summaryAdvancedDetails = document.createElement('details');
-    summaryAdvancedDetails.className = 'a11y-reading-guide__advanced';
-    const summaryAdvancedSummary = document.createElement('summary');
-    summaryAdvancedSummary.className = 'a11y-reading-guide__advanced-summary';
-    summaryAdvancedSummary.textContent = settings.summary_advanced_label || 'Options avancées';
-    summaryAdvancedDetails.appendChild(summaryAdvancedSummary);
-    const summaryAdvancedContent = document.createElement('div');
-    summaryAdvancedContent.className = 'a11y-reading-guide__advanced-content';
-    summaryAdvancedDetails.appendChild(summaryAdvancedContent);
-
-    const summarySelectorField = document.createElement('div');
-    summarySelectorField.className = 'a11y-reading-guide__field';
-    const summarySelectorLabel = document.createElement('label');
-    summarySelectorLabel.className = 'a11y-reading-guide__label';
-    summarySelectorLabel.textContent = settings.summary_selector_label || '';
-    const summarySelectorInput = document.createElement('input');
-    summarySelectorInput.type = 'text';
-    summarySelectorInput.className = 'a11y-reading-guide__input';
-    summarySelectorLabel.appendChild(summarySelectorInput);
-    summarySelectorField.appendChild(summarySelectorLabel);
-    if(settings.summary_selector_hint){
-      const summarySelectorHint = document.createElement('p');
-      summarySelectorHint.className = 'a11y-reading-guide__hint';
-      summarySelectorHint.textContent = settings.summary_selector_hint;
-      summarySelectorField.appendChild(summarySelectorHint);
-    }
-    summaryAdvancedContent.appendChild(summarySelectorField);
-
-    const summaryContainerField = document.createElement('div');
-    summaryContainerField.className = 'a11y-reading-guide__field';
-    const summaryContainerLabel = document.createElement('label');
-    summaryContainerLabel.className = 'a11y-reading-guide__label';
-    summaryContainerLabel.textContent = settings.summary_container_label || '';
-    const summaryContainerInput = document.createElement('input');
-    summaryContainerInput.type = 'text';
-    summaryContainerInput.className = 'a11y-reading-guide__input';
-    summaryContainerLabel.appendChild(summaryContainerInput);
-    summaryContainerField.appendChild(summaryContainerLabel);
-    if(settings.summary_container_hint){
-      const summaryContainerHint = document.createElement('p');
-      summaryContainerHint.className = 'a11y-reading-guide__hint';
-      summaryContainerHint.textContent = settings.summary_container_hint;
-      summaryContainerField.appendChild(summaryContainerHint);
-    }
-    summaryAdvancedContent.appendChild(summaryContainerField);
-
-    const summaryTitleField = document.createElement('div');
-    summaryTitleField.className = 'a11y-reading-guide__field';
-    const summaryTitleLabel = document.createElement('label');
-    summaryTitleLabel.className = 'a11y-reading-guide__label';
-    summaryTitleLabel.textContent = settings.summary_title_label || '';
-    const summaryTitleInput = document.createElement('input');
-    summaryTitleInput.type = 'text';
-    summaryTitleInput.className = 'a11y-reading-guide__input';
-    summaryTitleLabel.appendChild(summaryTitleInput);
-    summaryTitleField.appendChild(summaryTitleLabel);
-    summaryAdvancedContent.appendChild(summaryTitleField);
-
-    summarySection.appendChild(summaryAdvancedDetails);
-
     controls.appendChild(summarySection);
 
     const syllableSection = document.createElement('fieldset');
@@ -2934,20 +2814,12 @@ ${interactiveSelectors} {
       heightSlider,
       heightValue,
       summaryToggle,
-      summaryAdvancedDetails,
-      summarySelectorInput,
-      summaryContainerInput,
-      summaryTitleInput,
       syllableToggle,
       syllableSelectorInput,
       focusToggle,
       settings,
       wasConnected: false,
     };
-
-    if(summaryAdvancedDetails){
-      summaryAdvancedDetails.addEventListener('toggle', () => updateReadingGuideInstanceUI(instance));
-    }
 
     readingGuideInstances.add(instance);
     syncReadingGuideInstances();
@@ -2968,15 +2840,6 @@ ${interactiveSelectors} {
     heightSlider.addEventListener('change', () => setReadingGuideSetting('height', heightSlider.value));
 
     summaryToggle.addEventListener('change', () => setReadingGuideSetting('summaryEnabled', summaryToggle.checked));
-
-    summarySelectorInput.addEventListener('input', () => setReadingGuideSetting('summarySelector', summarySelectorInput.value, { persist: false, apply: false }));
-    summarySelectorInput.addEventListener('change', () => setReadingGuideSetting('summarySelector', summarySelectorInput.value));
-
-    summaryContainerInput.addEventListener('input', () => setReadingGuideSetting('summaryContainer', summaryContainerInput.value, { persist: false, apply: false }));
-    summaryContainerInput.addEventListener('change', () => setReadingGuideSetting('summaryContainer', summaryContainerInput.value));
-
-    summaryTitleInput.addEventListener('input', () => setReadingGuideSetting('summaryTitle', summaryTitleInput.value, { persist: false, apply: false }));
-    summaryTitleInput.addEventListener('change', () => setReadingGuideSetting('summaryTitle', summaryTitleInput.value));
 
     syllableToggle.addEventListener('change', () => setReadingGuideSetting('syllableEnabled', syllableToggle.checked));
 
