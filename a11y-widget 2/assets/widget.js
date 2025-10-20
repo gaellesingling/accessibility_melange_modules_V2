@@ -117,8 +117,174 @@
   const brightnessInstances = new Set();
   let brightnessSettings = loadBrightnessSettings();
   let brightnessActive = false;
-  let brightnessStyleElement = null;
   let brightnessIdCounter = 0;
+
+  const VISUAL_FILTER_ORDER = ['colorblind', 'brightness'];
+  const visualFilterComponents = new Map();
+  let visualFilterStyleElement = null;
+
+  function ensureVisualFilterStyleElement(){
+    if(visualFilterStyleElement && visualFilterStyleElement.isConnected){ return visualFilterStyleElement; }
+    let el = document.getElementById('a11y-visual-filter-styles');
+    if(!el){
+      el = document.createElement('style');
+      el.id = 'a11y-visual-filter-styles';
+      document.head.appendChild(el);
+    }
+    visualFilterStyleElement = el;
+    return el;
+  }
+
+  function composeVisualFilterValue(){
+    const ordered = [];
+    VISUAL_FILTER_ORDER.forEach(key => {
+      const value = visualFilterComponents.get(key);
+      if(typeof value === 'string' && value.trim()){ ordered.push(value.trim()); }
+    });
+    visualFilterComponents.forEach((value, key) => {
+      if(VISUAL_FILTER_ORDER.includes(key)){ return; }
+      if(typeof value === 'string' && value.trim()){ ordered.push(value.trim()); }
+    });
+    return ordered.join(' ').trim();
+  }
+
+  function updateVisualFilterStyles(){
+    const combined = composeVisualFilterValue();
+    if(!visualFilterStyleElement && !combined){
+      return;
+    }
+    const styleEl = ensureVisualFilterStyleElement();
+    const filterValue = combined || 'none';
+    const rules = [
+      `body { --a11y-visual-filter: ${filterValue}; }`,
+      `body > :not([data-a11y-filter-exempt]) { filter: var(--a11y-visual-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
+      `#a11y-overlay { --a11y-visual-filter: ${filterValue}; filter: var(--a11y-visual-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
+    ];
+    styleEl.textContent = rules.join('\n');
+    if(combined){
+      document.documentElement.classList.add('a11y-visual-filter-active');
+    } else {
+      document.documentElement.classList.remove('a11y-visual-filter-active');
+    }
+  }
+
+  function setVisualFilterComponent(key, value){
+    if(!key){ return; }
+    const normalized = typeof value === 'string' ? value.trim() : '';
+    if(normalized && normalized !== 'none'){
+      visualFilterComponents.set(key, normalized);
+    } else {
+      visualFilterComponents.delete(key);
+    }
+    updateVisualFilterStyles();
+  }
+
+  function getVisualFilterComponent(key){
+    return visualFilterComponents.get(key) || '';
+  }
+
+  function clampFloat(value, min, max){
+    const numeric = Number(value);
+    if(!Number.isFinite(numeric)){ return min; }
+    return Math.min(max, Math.max(min, numeric));
+  }
+
+  function formatFilterNumber(value){
+    if(!Number.isFinite(value)){ return '0'; }
+    const rounded = Math.round(value * 1000) / 1000;
+    if(Object.is(rounded, -0)){ return '0'; }
+    return `${rounded}`;
+  }
+
+  const COLORBLIND_FILTER_PRESETS = {
+    'vision-daltonisme-deuteranopie': { intensity: 0.8, hue: 10, saturate: 0.2, contrast: 0.1, sepia: 0.1 },
+    'vision-daltonisme-deuteranomalie': { intensity: 0.6, hue: 8, saturate: 0.15, contrast: 0.08, sepia: 0.03 },
+    'vision-daltonisme-protanopie': { intensity: 0.8, hue: -5, saturate: 0.3, contrast: 0.15, sepia: 0.05 },
+    'vision-daltonisme-protanomalie': { intensity: 0.7, hue: -3, saturate: 0.2, contrast: 0.1, sepia: 0.02 },
+    'vision-daltonisme-tritanopie': { intensity: 0.85, hue: 25, saturate: 0.25, contrast: 0.15, sepia: 0.05 },
+    'vision-daltonisme-tritanomalie': { intensity: 0.6, hue: 12, saturate: 0.15, contrast: 0.08, sepia: 0.03, multiplier: 1 },
+    'vision-daltonisme-achromatopsie': { grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
+  };
+
+  const colorblindActiveFilters = new Set();
+  const colorblindRootClasses = new Set();
+
+  function getColorblindShortName(slug){
+    if(typeof slug !== 'string'){ return ''; }
+    return slug.replace(/^vision-daltonisme-/, '');
+  }
+
+  function buildColorblindFilterValue(){
+    if(!colorblindActiveFilters.size){ return ''; }
+    let hueRotate = 0;
+    let saturate = 1;
+    let contrast = 1;
+    let sepia = 0;
+    let grayscale = 0;
+    let brightness = 1;
+
+    colorblindActiveFilters.forEach(slug => {
+      const preset = COLORBLIND_FILTER_PRESETS[slug];
+      if(!preset){ return; }
+      const intensity = typeof preset.intensity === 'number' ? preset.intensity : 1;
+      const multiplier = typeof preset.multiplier === 'number' ? preset.multiplier : 1;
+      const effective = intensity * multiplier;
+      if(typeof preset.hue === 'number'){ hueRotate += preset.hue * effective; }
+      if(typeof preset.saturate === 'number'){ saturate *= 1 + (preset.saturate * effective); }
+      if(typeof preset.contrast === 'number'){ contrast *= 1 + (preset.contrast * effective); }
+      if(typeof preset.sepia === 'number'){ sepia += preset.sepia * effective; }
+      if(typeof preset.grayscale === 'number'){ grayscale = Math.max(grayscale, preset.grayscale); }
+      if(typeof preset.contrastFactor === 'number'){ contrast *= preset.contrastFactor; }
+      if(typeof preset.brightnessFactor === 'number'){ brightness *= preset.brightnessFactor; }
+    });
+
+    const parts = [];
+    if(grayscale > 0){ parts.push(`grayscale(${formatFilterNumber(clampFloat(grayscale, 0, 1))})`); }
+    if(sepia > 0){ parts.push(`sepia(${formatFilterNumber(clampFloat(sepia, 0, 1))})`); }
+    if(Math.abs(hueRotate) > 0.001){ parts.push(`hue-rotate(${formatFilterNumber(hueRotate)}deg)`); }
+    if(Math.abs(saturate - 1) > 0.001){ parts.push(`saturate(${formatFilterNumber(clampFloat(saturate, 0.1, 5))})`); }
+    if(Math.abs(contrast - 1) > 0.001){ parts.push(`contrast(${formatFilterNumber(clampFloat(contrast, 0.1, 5))})`); }
+    if(Math.abs(brightness - 1) > 0.001){ parts.push(`brightness(${formatFilterNumber(clampFloat(brightness, 0.2, 3))})`); }
+    return parts.join(' ');
+  }
+
+  function updateColorblindRootState(){
+    const root = document.documentElement;
+    if(!root){ return; }
+    colorblindRootClasses.forEach(cls => root.classList.remove(cls));
+    colorblindRootClasses.clear();
+    if(!colorblindActiveFilters.size){
+      root.classList.remove('a11y-colorblind-active');
+      delete root.dataset.a11yColorblindActive;
+      delete root.dataset.a11yColorblindFilters;
+      return;
+    }
+    const names = Array.from(colorblindActiveFilters).map(getColorblindShortName).filter(Boolean);
+    names.forEach(name => {
+      const className = `a11y-colorblind-${name}`;
+      root.classList.add(className);
+      colorblindRootClasses.add(className);
+    });
+    root.classList.add('a11y-colorblind-active');
+    root.dataset.a11yColorblindActive = 'on';
+    root.dataset.a11yColorblindFilters = names.join(' ');
+  }
+
+  function refreshColorblindFilters(){
+    const filterValue = buildColorblindFilterValue();
+    setVisualFilterComponent('colorblind', filterValue);
+    updateColorblindRootState();
+  }
+
+  function setColorblindFilterState(slug, enabled){
+    if(!COLORBLIND_FILTER_PRESETS[slug]){ return; }
+    if(enabled){
+      colorblindActiveFilters.add(slug);
+    } else {
+      colorblindActiveFilters.delete(slug);
+    }
+    refreshColorblindFilters();
+  }
 
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
   const DYSLEXIA_SETTINGS_KEY = 'a11y-widget-dyslexie-settings:v1';
@@ -936,18 +1102,6 @@ ${interactiveSelectors} {
     try { localStorage.setItem(BRIGHTNESS_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
   }
 
-  function ensureBrightnessStyleElement(){
-    if(brightnessStyleElement && brightnessStyleElement.isConnected){ return brightnessStyleElement; }
-    let el = document.getElementById('a11y-brightness-styles');
-    if(!el){
-      el = document.createElement('style');
-      el.id = 'a11y-brightness-styles';
-      document.head.appendChild(el);
-    }
-    brightnessStyleElement = el;
-    return el;
-  }
-
   function clearBrightnessModeClasses(){
     if(!overlay){ return; }
     Object.values(BRIGHTNESS_MODE_CLASSES).forEach(className => {
@@ -976,21 +1130,13 @@ ${interactiveSelectors} {
 
   function updateBrightnessFilter(){
     if(!brightnessActive){
-      if(brightnessStyleElement){ brightnessStyleElement.textContent = ''; }
+      setVisualFilterComponent('brightness', '');
       return;
     }
-    const styleEl = ensureBrightnessStyleElement();
     const baseFilter = BRIGHTNESS_MODE_FILTERS[normalizeBrightnessMode(brightnessSettings.mode)] || '';
     const adjustments = buildBrightnessFilter(brightnessSettings);
-    const combined = [baseFilter, adjustments].filter(Boolean).join(' ');
-    const filterValue = combined || 'none';
-    const selectorPrefix = `[data-a11y-${BRIGHTNESS_SLUG}="on"]`;
-    const rules = [
-      `${selectorPrefix} body { --a11y-brightness-filter: ${filterValue}; }`,
-      `${selectorPrefix} body > :not([data-a11y-filter-exempt]) { filter: var(--a11y-brightness-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
-      `${selectorPrefix} #a11y-overlay { --a11y-brightness-filter: ${filterValue}; filter: var(--a11y-brightness-filter); transition: filter 0.25s ease, background-color 0.25s ease, color 0.25s ease; }`,
-    ];
-    styleEl.textContent = rules.join('\n');
+    const combined = [baseFilter, adjustments].filter(Boolean).join(' ').trim();
+    setVisualFilterComponent('brightness', combined);
   }
 
   function pruneBrightnessInstances(){
@@ -1105,14 +1251,18 @@ ${interactiveSelectors} {
   function setBrightnessActive(on){
     const next = !!on;
     if(brightnessActive === next){
-      if(next){ ensureBrightnessStyleElement(); }
+      if(next){ ensureVisualFilterStyleElement(); }
       applyBrightnessMode();
       updateBrightnessFilter();
       syncBrightnessInstances();
       return;
     }
     brightnessActive = next;
-    if(next){ ensureBrightnessStyleElement(); }
+    if(next){
+      ensureVisualFilterStyleElement();
+    } else {
+      setVisualFilterComponent('brightness', '');
+    }
     applyBrightnessMode();
     updateBrightnessFilter();
     syncBrightnessInstances();
@@ -3332,8 +3482,15 @@ ${interactiveSelectors} {
   }
 
   // ---------- Wiring ----------
+  Object.keys(COLORBLIND_FILTER_PRESETS).forEach(slug => {
+    A11yAPI.registerFeature(slug, on => {
+      if(on){ ensureVisualFilterStyleElement(); }
+      setColorblindFilterState(slug, on);
+    });
+  });
+
   A11yAPI.registerFeature(BRIGHTNESS_SLUG, on => {
-    if(on){ ensureBrightnessStyleElement(); }
+    if(on){ ensureVisualFilterStyleElement(); }
     setBrightnessActive(on);
   });
 
