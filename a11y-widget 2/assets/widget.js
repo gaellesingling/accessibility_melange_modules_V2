@@ -2418,55 +2418,7 @@ ${interactiveSelectors} {
     return false;
   }
 
-  function extractReadingGuideSectionSummary(heading, selector){
-    if(!(heading instanceof Element)){ return ''; }
-    const maxLength = 320;
-    const preferredSelectors = [
-      '[data-reading-guide-summary]',
-      'p',
-      'li',
-      '[role="paragraph"]'
-    ];
-    const currentLevel = getReadingGuideHeadingLevel(heading);
-    let sibling = heading.nextElementSibling;
-    const collected = [];
-    while(sibling){
-      if(isReadingGuideHeadingCandidate(sibling, selector)){
-        const siblingLevel = getReadingGuideHeadingLevel(sibling);
-        if(siblingLevel <= currentLevel){ break; }
-      }
-      let text = '';
-      if(sibling.hasAttribute && sibling.hasAttribute('data-reading-guide-summary')){
-        text = sibling.getAttribute('data-reading-guide-summary') || sibling.textContent || '';
-      } else {
-        const target = preferredSelectors.reduce((found, sel) => {
-          if(found){ return found; }
-          try {
-            return sibling.matches(sel) ? sibling : sibling.querySelector(sel);
-          } catch(err){
-            return found;
-          }
-        }, null);
-        if(target){ text = target.textContent || ''; }
-      }
-      text = text.replace(/\s+/g, ' ').trim();
-      if(text){
-        collected.push(text);
-        if(collected.join(' ').length >= maxLength){ break; }
-      }
-      sibling = sibling.nextElementSibling;
-    }
-    if(!collected.length){ return ''; }
-    const full = collected.join(' ').replace(/\s+/g, ' ').trim();
-    if(!full){ return ''; }
-    if(full.length <= maxLength){ return full; }
-    const clipped = full.slice(0, maxLength);
-    const trimmed = clipped.replace(/[,;:\-\s]+\S*$/, '').trim();
-    const safe = trimmed || clipped.trim();
-    return safe ? `${safe}…` : '';
-  }
-
-  function buildReadingGuideSummaryTree(headings, selector){
+  function buildReadingGuideSummaryTree(headings){
     const nodes = [];
     const stack = [];
     headings.forEach((heading, index) => {
@@ -2475,8 +2427,7 @@ ${interactiveSelectors} {
         heading,
         level,
         index,
-        children: [],
-        summary: extractReadingGuideSectionSummary(heading, selector)
+        children: []
       };
       while(stack.length && stack[stack.length - 1].level >= level){
         stack.pop();
@@ -2494,23 +2445,19 @@ ${interactiveSelectors} {
   function createReadingGuideSummaryList(nodes){
     const list = document.createElement('ol');
     list.className = 'a11y-reading-guide-summary__list';
+    list.dataset.readingGuideNoDrag = 'true';
     nodes.forEach(node => {
       const heading = node.heading;
       const id = ensureReadingGuideHeadingId(heading, node.index);
       const text = heading.textContent || heading.getAttribute('aria-label') || id;
       const item = document.createElement('li');
       item.className = 'a11y-reading-guide-summary__item';
+      item.dataset.readingGuideNoDrag = 'true';
       const link = document.createElement('a');
       link.className = 'a11y-reading-guide-summary__link';
       link.href = `#${id}`;
       link.textContent = text.replace(/\s+/g, ' ').trim();
       item.appendChild(link);
-      if(node.summary){
-        const excerpt = document.createElement('p');
-        excerpt.className = 'a11y-reading-guide-summary__excerpt';
-        excerpt.textContent = node.summary;
-        item.appendChild(excerpt);
-      }
       if(node.children.length){
         const childList = createReadingGuideSummaryList(node.children);
         childList.setAttribute('aria-label', link.textContent);
@@ -2537,9 +2484,13 @@ ${interactiveSelectors} {
       container.setAttribute('aria-label', titleText);
     }
     container.setAttribute('role', 'navigation');
-    const tree = buildReadingGuideSummaryTree(headings, selector);
+    const tree = buildReadingGuideSummaryTree(headings);
     const list = createReadingGuideSummaryList(tree);
-    container.appendChild(list);
+    const content = document.createElement('div');
+    content.className = 'a11y-reading-guide-summary__content';
+    content.dataset.readingGuideNoDrag = 'true';
+    content.appendChild(list);
+    container.appendChild(content);
     container.dataset.readingGuideSummary = 'on';
     readingGuideSummaryEl = container;
     setupReadingGuideSummaryContainer(container);
