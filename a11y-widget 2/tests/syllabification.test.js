@@ -49,4 +49,35 @@ monosyllables.forEach(word => {
   assert(!actual.includes('·'), `Monosyllabic word ${word} should not contain a middot: ${actual}`);
 });
 
+const normalizeDescriptor = Object.getOwnPropertyDescriptor(String.prototype, 'normalize');
+const originalNormalize = normalizeDescriptor ? normalizeDescriptor.value : undefined;
+if(normalizeDescriptor){
+  Object.defineProperty(String.prototype, 'normalize', {
+    value: undefined,
+    writable: true,
+    configurable: true,
+    enumerable: !!normalizeDescriptor.enumerable,
+  });
+}
+
+try {
+  const sandboxWithoutNormalize = {};
+  vm.createContext(sandboxWithoutNormalize);
+  vm.runInContext(snippet, sandboxWithoutNormalize);
+  const fallbackSyllabify = sandboxWithoutNormalize.syllabifyReadingGuideWord;
+  if(typeof fallbackSyllabify !== 'function'){
+    throw new Error('Failed to load syllabification routine without normalize support');
+  }
+  const result = fallbackSyllabify('bonjour');
+  assert.strictEqual(result, 'bon·jour', `Unexpected syllabification without normalize: ${result}`);
+} finally {
+  if(normalizeDescriptor){
+    Object.defineProperty(String.prototype, 'normalize', normalizeDescriptor);
+  } else if(originalNormalize !== undefined){
+    String.prototype.normalize = originalNormalize;
+  } else {
+    delete String.prototype.normalize;
+  }
+}
+
 console.log('All syllabification checks passed.');

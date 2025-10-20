@@ -2605,8 +2605,9 @@ ${interactiveSelectors} {
   };
 
   function stripFrenchDiacritics(str){
-    return str
-      .normalize('NFD')
+    if(typeof str !== 'string'){ return ''; }
+    const normalized = typeof str.normalize === 'function' ? str.normalize('NFD') : str;
+    return normalized
       .replace(/[\u0300-\u036f]/g, '')
       .replace(/œ/g, 'oe')
       .replace(/æ/g, 'ae');
@@ -2722,7 +2723,7 @@ ${interactiveSelectors} {
         result[result.length - 1] += originalCharacters[i];
       }
     }
-    return cleaned;
+    return result;
   }
 
   function mergeFrenchTerminalMuteE(syllables){
