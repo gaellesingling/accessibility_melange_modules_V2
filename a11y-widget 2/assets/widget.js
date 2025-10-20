@@ -356,11 +356,24 @@
     animationExemptAttribute: 'data-reading-guide-allow-animation',
   };
   const READING_GUIDE_GLOBAL_HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
+  const READING_GUIDE_SUMMARY_POS_KEY = 'a11y-widget-reading-guide-summary-pos:v1';
   const readingGuideInstances = new Set();
   let readingGuideSettings = loadReadingGuideSettings();
   let readingGuideActive = false;
   let readingGuideOverlayEl = null;
   let readingGuideSummaryEl = null;
+  let readingGuideSummaryPosition = null;
+  let readingGuideSummaryHasCustomPosition = false;
+  let readingGuideSummaryPointerId = null;
+  let readingGuideSummaryDragging = false;
+  let readingGuideSummaryDragOffsetX = 0;
+  let readingGuideSummaryDragOffsetY = 0;
+  let readingGuideSummaryDragStart = null;
+  let readingGuideSummaryDragMoved = false;
+  let readingGuideSummaryActiveTouchId = null;
+  let readingGuideSummaryPreventClick = false;
+  let readingGuideSummaryClickResetTimer = null;
+  const readingGuideSummaryDisposers = [];
   let readingGuideFocusClassApplied = false;
   let readingGuidePointerY = null;
   const readingGuideTextNodes = new Map();
@@ -1863,6 +1876,9 @@ ${interactiveSelectors} {
     const { persist: shouldPersist = true } = options;
     readingGuideSettings = Object.assign({}, READING_GUIDE_DEFAULTS);
     if(shouldPersist){ persistReadingGuideSettings(); }
+    try { localStorage.removeItem(READING_GUIDE_SUMMARY_POS_KEY); } catch(err){ /* ignore */ }
+    readingGuideSummaryHasCustomPosition = false;
+    readingGuideSummaryPosition = null;
     if(readingGuideActive){
       applyReadingGuideStyles();
       applyReadingGuideSummary();
@@ -2049,6 +2065,290 @@ ${interactiveSelectors} {
     readingGuideCleanup.push(() => window.removeEventListener('blur', blurHandler));
   }
 
+  function cleanupReadingGuideSummaryInteractions(){
+    if(readingGuideSummaryClickResetTimer){
+      clearTimeout(readingGuideSummaryClickResetTimer);
+      readingGuideSummaryClickResetTimer = null;
+    }
+    while(readingGuideSummaryDisposers.length){
+      const disposer = readingGuideSummaryDisposers.pop();
+      try { disposer(); } catch(err){ /* ignore */ }
+    }
+    readingGuideSummaryDragging = false;
+    readingGuideSummaryPointerId = null;
+    readingGuideSummaryActiveTouchId = null;
+    readingGuideSummaryDragMoved = false;
+    readingGuideSummaryDragStart = null;
+    readingGuideSummaryPreventClick = false;
+    if(readingGuideSummaryEl){
+      readingGuideSummaryEl.classList.remove('is-dragging');
+    }
+  }
+
+  function loadReadingGuideSummaryPosition(){
+    try {
+      const raw = localStorage.getItem(READING_GUIDE_SUMMARY_POS_KEY);
+      if(!raw){ return null; }
+      const data = JSON.parse(raw);
+      if(typeof data?.left === 'number' && typeof data?.top === 'number'){
+        return { left: data.left, top: data.top };
+      }
+    } catch(err){ /* ignore */ }
+    return null;
+  }
+
+  function persistReadingGuideSummaryPosition(left, top){
+    try {
+      localStorage.setItem(READING_GUIDE_SUMMARY_POS_KEY, JSON.stringify({ left, top }));
+    } catch(err){ /* ignore */ }
+  }
+
+  function clampReadingGuideSummaryPosition(left, top){
+    if(!readingGuideSummaryEl){ return { left, top }; }
+    const rect = readingGuideSummaryEl.getBoundingClientRect();
+    const width = rect.width || readingGuideSummaryEl.offsetWidth || 0;
+    const height = rect.height || readingGuideSummaryEl.offsetHeight || 0;
+    const maxLeft = Math.max(0, window.innerWidth - width);
+    const maxTop = Math.max(0, window.innerHeight - height);
+    return {
+      left: Math.min(Math.max(left, 0), maxLeft),
+      top: Math.min(Math.max(top, 0), maxTop)
+    };
+  }
+
+  function applyReadingGuideSummaryPosition(left, top, options = {}){
+    if(!readingGuideSummaryEl){ return null; }
+    const clamped = clampReadingGuideSummaryPosition(left, top);
+    readingGuideSummaryEl.style.left = `${clamped.left}px`;
+    readingGuideSummaryEl.style.top = `${clamped.top}px`;
+    readingGuideSummaryPosition = { left: clamped.left, top: clamped.top };
+    if(options.persist){
+      persistReadingGuideSummaryPosition(clamped.left, clamped.top);
+      readingGuideSummaryHasCustomPosition = true;
+    }
+    return readingGuideSummaryPosition;
+  }
+
+  function computeReadingGuideSummaryDefaultPosition(){
+    const margin = 24;
+    if(!readingGuideSummaryEl){
+      return { left: margin, top: margin };
+    }
+    const rect = readingGuideSummaryEl.getBoundingClientRect();
+    const width = rect.width || readingGuideSummaryEl.offsetWidth || 0;
+    const height = rect.height || readingGuideSummaryEl.offsetHeight || 0;
+    const availableLeft = Math.max(0, window.innerWidth - width);
+    const baseLeft = availableLeft > margin ? availableLeft - margin : availableLeft;
+    const baseTop = Math.min(Math.max(margin, 0), Math.max(0, window.innerHeight - height));
+    return clampReadingGuideSummaryPosition(baseLeft, baseTop);
+  }
+
+  function restoreReadingGuideSummaryPosition(){
+    if(!readingGuideSummaryEl){ return; }
+    const stored = loadReadingGuideSummaryPosition();
+    if(stored){
+      const applied = applyReadingGuideSummaryPosition(stored.left, stored.top) || stored;
+      readingGuideSummaryHasCustomPosition = true;
+      if(applied.left !== stored.left || applied.top !== stored.top){
+        persistReadingGuideSummaryPosition(applied.left, applied.top);
+      }
+      return;
+    }
+    readingGuideSummaryHasCustomPosition = false;
+    const defaults = computeReadingGuideSummaryDefaultPosition();
+    applyReadingGuideSummaryPosition(defaults.left, defaults.top);
+  }
+
+  function ensureReadingGuideSummaryWithinViewport(persistIfChanged){
+    if(!readingGuideSummaryEl || !readingGuideSummaryPosition){ return; }
+    const clamped = clampReadingGuideSummaryPosition(readingGuideSummaryPosition.left, readingGuideSummaryPosition.top);
+    if(clamped.left !== readingGuideSummaryPosition.left || clamped.top !== readingGuideSummaryPosition.top){
+      applyReadingGuideSummaryPosition(clamped.left, clamped.top);
+      if(persistIfChanged){
+        persistReadingGuideSummaryPosition(clamped.left, clamped.top);
+      }
+    }
+  }
+
+  function handleReadingGuideSummaryResize(){
+    ensureReadingGuideSummaryWithinViewport(readingGuideSummaryHasCustomPosition);
+  }
+
+  function isReadingGuideSummaryDragSuppressed(target){
+    if(!(target instanceof Element)){ return false; }
+    if(target.closest('a, button, input, select, textarea, label, summary, [role="button"], [role="link"], [data-reading-guide-no-drag]')){
+      return true;
+    }
+    return false;
+  }
+
+  function startReadingGuideSummaryDrag(clientX, clientY){
+    if(!readingGuideSummaryEl){ return; }
+    readingGuideSummaryDragging = true;
+    readingGuideSummaryDragMoved = false;
+    const rect = readingGuideSummaryEl.getBoundingClientRect();
+    readingGuideSummaryDragOffsetX = clientX - rect.left;
+    readingGuideSummaryDragOffsetY = clientY - rect.top;
+    readingGuideSummaryDragStart = { left: rect.left, top: rect.top };
+    readingGuideSummaryPosition = { left: rect.left, top: rect.top };
+    readingGuideSummaryEl.classList.add('is-dragging');
+  }
+
+  function moveReadingGuideSummaryDrag(clientX, clientY){
+    if(!readingGuideSummaryDragging){ return; }
+    const targetLeft = clientX - readingGuideSummaryDragOffsetX;
+    const targetTop = clientY - readingGuideSummaryDragOffsetY;
+    const applied = applyReadingGuideSummaryPosition(targetLeft, targetTop);
+    if(!applied || !readingGuideSummaryDragStart){ return; }
+    if(Math.abs(applied.left - readingGuideSummaryDragStart.left) > 1 || Math.abs(applied.top - readingGuideSummaryDragStart.top) > 1){
+      readingGuideSummaryDragMoved = true;
+    }
+  }
+
+  function endReadingGuideSummaryDrag(){
+    if(!readingGuideSummaryDragging){ return; }
+    readingGuideSummaryDragging = false;
+    readingGuideSummaryPointerId = null;
+    readingGuideSummaryActiveTouchId = null;
+    readingGuideSummaryDragStart = null;
+    if(readingGuideSummaryEl){
+      readingGuideSummaryEl.classList.remove('is-dragging');
+    }
+    if(readingGuideSummaryDragMoved && readingGuideSummaryPosition){
+      persistReadingGuideSummaryPosition(readingGuideSummaryPosition.left, readingGuideSummaryPosition.top);
+      readingGuideSummaryHasCustomPosition = true;
+      readingGuideSummaryPreventClick = true;
+      if(readingGuideSummaryClickResetTimer){
+        clearTimeout(readingGuideSummaryClickResetTimer);
+      }
+      readingGuideSummaryClickResetTimer = setTimeout(() => {
+        readingGuideSummaryPreventClick = false;
+        readingGuideSummaryClickResetTimer = null;
+      }, 0);
+    } else {
+      readingGuideSummaryPreventClick = false;
+    }
+    readingGuideSummaryDragMoved = false;
+  }
+
+  function setupReadingGuideSummaryContainer(container){
+    if(!container){ return; }
+    readingGuideSummaryEl = container;
+    restoreReadingGuideSummaryPosition();
+    const clickHandler = event => {
+      if(!readingGuideSummaryPreventClick){ return; }
+      event.preventDefault();
+      event.stopPropagation();
+      readingGuideSummaryPreventClick = false;
+    };
+    container.addEventListener('click', clickHandler, true);
+    readingGuideSummaryDisposers.push(() => container.removeEventListener('click', clickHandler, true));
+
+    if(supportsPointer){
+      const pointerDown = event => {
+        if(event.pointerType === 'mouse' && event.button !== 0){ return; }
+        if(isReadingGuideSummaryDragSuppressed(event.target)){ return; }
+        readingGuideSummaryPointerId = event.pointerId;
+        startReadingGuideSummaryDrag(event.clientX, event.clientY);
+        if(container.setPointerCapture){
+          try { container.setPointerCapture(event.pointerId); } catch(err){ /* ignore */ }
+        }
+        if(event.pointerType !== 'mouse'){
+          event.preventDefault();
+        }
+      };
+      const pointerMove = event => {
+        if(!readingGuideSummaryDragging || event.pointerId !== readingGuideSummaryPointerId){ return; }
+        moveReadingGuideSummaryDrag(event.clientX, event.clientY);
+      };
+      const pointerUp = event => {
+        if(event.pointerId !== readingGuideSummaryPointerId){ return; }
+        if(container.releasePointerCapture){
+          try { container.releasePointerCapture(event.pointerId); } catch(err){ /* ignore */ }
+        }
+        endReadingGuideSummaryDrag();
+      };
+      container.addEventListener('pointerdown', pointerDown);
+      container.addEventListener('pointermove', pointerMove);
+      container.addEventListener('pointerup', pointerUp);
+      container.addEventListener('pointercancel', pointerUp);
+      readingGuideSummaryDisposers.push(() => {
+        container.removeEventListener('pointerdown', pointerDown);
+        container.removeEventListener('pointermove', pointerMove);
+        container.removeEventListener('pointerup', pointerUp);
+        container.removeEventListener('pointercancel', pointerUp);
+      });
+    } else {
+      const mouseMove = event => {
+        if(!readingGuideSummaryDragging){ return; }
+        moveReadingGuideSummaryDrag(event.clientX, event.clientY);
+      };
+      const mouseUp = () => {
+        if(!readingGuideSummaryDragging){ return; }
+        document.removeEventListener('mousemove', mouseMove);
+        document.removeEventListener('mouseup', mouseUp);
+        endReadingGuideSummaryDrag();
+      };
+      const mouseDown = event => {
+        if(event.button !== 0){ return; }
+        if(isReadingGuideSummaryDragSuppressed(event.target)){ return; }
+        startReadingGuideSummaryDrag(event.clientX, event.clientY);
+        document.addEventListener('mousemove', mouseMove);
+        document.addEventListener('mouseup', mouseUp);
+        event.preventDefault();
+      };
+      container.addEventListener('mousedown', mouseDown);
+      readingGuideSummaryDisposers.push(() => {
+        container.removeEventListener('mousedown', mouseDown);
+        document.removeEventListener('mousemove', mouseMove);
+        document.removeEventListener('mouseup', mouseUp);
+      });
+
+      const touchMove = event => {
+        if(readingGuideSummaryActiveTouchId == null){ return; }
+        const touch = findTouchById(event.changedTouches, readingGuideSummaryActiveTouchId) || findTouchById(event.touches, readingGuideSummaryActiveTouchId);
+        if(!touch){ return; }
+        event.preventDefault();
+        moveReadingGuideSummaryDrag(touch.clientX, touch.clientY);
+      };
+      const touchEnd = event => {
+        if(readingGuideSummaryActiveTouchId == null){ return; }
+        const touch = findTouchById(event.changedTouches, readingGuideSummaryActiveTouchId);
+        if(!touch){ return; }
+        readingGuideSummaryActiveTouchId = null;
+        document.removeEventListener('touchmove', touchMove);
+        document.removeEventListener('touchend', touchEnd);
+        document.removeEventListener('touchcancel', touchEnd);
+        endReadingGuideSummaryDrag();
+      };
+      const touchStart = event => {
+        if(readingGuideSummaryActiveTouchId != null){ return; }
+        if(event.changedTouches && event.changedTouches.length){
+          if(isReadingGuideSummaryDragSuppressed(event.target)){ return; }
+          const touch = event.changedTouches[0];
+          readingGuideSummaryActiveTouchId = touch.identifier;
+          startReadingGuideSummaryDrag(touch.clientX, touch.clientY);
+          document.addEventListener('touchmove', touchMove, { passive: false });
+          document.addEventListener('touchend', touchEnd);
+          document.addEventListener('touchcancel', touchEnd);
+          event.preventDefault();
+        }
+      };
+      container.addEventListener('touchstart', touchStart, { passive: false });
+      readingGuideSummaryDisposers.push(() => {
+        container.removeEventListener('touchstart', touchStart, { passive: false });
+        document.removeEventListener('touchmove', touchMove, { passive: false });
+        document.removeEventListener('touchend', touchEnd);
+        document.removeEventListener('touchcancel', touchEnd);
+      });
+    }
+
+    const resizeHandler = () => handleReadingGuideSummaryResize();
+    window.addEventListener('resize', resizeHandler);
+    readingGuideSummaryDisposers.push(() => window.removeEventListener('resize', resizeHandler));
+    handleReadingGuideSummaryResize();
+  }
+
   function resolveReadingGuideSummaryContainer(){
     const attrSelector = getReadingGuideAttributeSelector('tocAttribute');
     if(attrSelector){
@@ -2223,6 +2523,7 @@ ${interactiveSelectors} {
 
   function buildReadingGuideSummary(container, headings, selector){
     if(!container){ return; }
+    cleanupReadingGuideSummaryInteractions();
     container.classList.add('a11y-reading-guide-summary');
     container.innerHTML = '';
     const titleText = readingGuideTexts.summaryTitleFallback;
@@ -2241,10 +2542,12 @@ ${interactiveSelectors} {
     container.appendChild(list);
     container.dataset.readingGuideSummary = 'on';
     readingGuideSummaryEl = container;
+    setupReadingGuideSummaryContainer(container);
   }
 
   function clearReadingGuideSummary(){
     if(!readingGuideSummaryEl){ return; }
+    cleanupReadingGuideSummaryInteractions();
     if(readingGuideSummaryEl.dataset && readingGuideSummaryEl.dataset.readingGuideInjected === 'true'){
       readingGuideSummaryEl.remove();
     } else {
@@ -2253,8 +2556,13 @@ ${interactiveSelectors} {
         delete readingGuideSummaryEl.dataset.readingGuideSummary;
       }
       readingGuideSummaryEl.classList.remove('a11y-reading-guide-summary');
+      if(readingGuideSummaryEl.style){
+        readingGuideSummaryEl.style.removeProperty('left');
+        readingGuideSummaryEl.style.removeProperty('top');
+      }
     }
     readingGuideSummaryEl = null;
+    readingGuideSummaryPosition = null;
   }
 
   function getReadingGuideContentScopes(){
@@ -4694,6 +5002,7 @@ ${interactiveSelectors} {
       try { localStorage.removeItem(CURSOR_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(BRIGHTNESS_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(READING_GUIDE_SETTINGS_KEY); } catch(err){}
+      try { localStorage.removeItem(READING_GUIDE_SUMMARY_POS_KEY); } catch(err){}
       document.documentElement.style.removeProperty('--a11y-launcher-x');
       document.documentElement.style.removeProperty('--a11y-launcher-y');
       launcherLastPos = null;
