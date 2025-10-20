@@ -1037,6 +1037,12 @@
 .a11y-subfeature .a11y-switch {
   align-self: flex-start;
 }
+.a11y-subfeature.is-disabled {
+  opacity: 0.6;
+}
+.a11y-subfeature.is-disabled .label {
+  color: var(--a11y-text-subtle);
+}
 .a11y-empty { margin: 0 2px 12px; font-size: .9rem; color: #555; }
 
 /* Switch */
@@ -1047,6 +1053,17 @@
 .a11y-switch input:checked + .track { background: var(--a11y-primary); }
 .a11y-switch input:checked ~ .thumb { transform: translateX(18px); }
 .a11y-switch input:focus-visible + .track { outline: 3px solid #000; outline-offset: 2px; }
+.a11y-switch.is-disabled,
+.a11y-switch input:disabled {
+  cursor: not-allowed;
+}
+.a11y-switch.is-disabled .track {
+  background: #c6c7cf;
+}
+.a11y-switch.is-disabled .thumb {
+  background: #f2f2f4;
+  box-shadow: none;
+}
 
 .a11y-letter-highlight {
   background: var(--a11y-dyslexie-color, #ffeb3b);

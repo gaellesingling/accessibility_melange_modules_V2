@@ -206,8 +206,54 @@
     'vision-daltonisme-achromatopsie': { grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
   };
 
+  const COLORBLIND_COMBINABLE_SLUGS = [
+    'vision-daltonisme-deuteranopie',
+    'vision-daltonisme-protanopie',
+    'vision-daltonisme-protanomalie',
+    'vision-daltonisme-tritanopie',
+    'vision-daltonisme-tritanomalie',
+  ];
+  const COLORBLIND_DISABLED_SLUGS = [
+    'vision-daltonisme-deuteranomalie',
+    'vision-daltonisme-achromatopsie',
+  ];
+  const COLORBLIND_CONTROLLED_SET = new Set([...COLORBLIND_COMBINABLE_SLUGS, ...COLORBLIND_DISABLED_SLUGS]);
+
   const colorblindActiveFilters = new Set();
   const colorblindRootClasses = new Set();
+
+  function isManagedColorblindSlug(slug){
+    return COLORBLIND_CONTROLLED_SET.has(slug);
+  }
+
+  function areCombinableColorblindFiltersActive(){
+    if(!COLORBLIND_COMBINABLE_SLUGS.length){ return false; }
+    return COLORBLIND_COMBINABLE_SLUGS.every(slug => colorblindActiveFilters.has(slug));
+  }
+
+  function updateColorblindToggleAvailability(){
+    const disableExclusive = areCombinableColorblindFiltersActive();
+    COLORBLIND_DISABLED_SLUGS.forEach(slug => {
+      if(disableExclusive && colorblindActiveFilters.has(slug)){
+        toggleFeature(slug, false);
+      }
+      const input = featureInputs.get(slug);
+      if(!input){ return; }
+      input.disabled = disableExclusive;
+      const switchEl = input.closest('.a11y-switch');
+      if(switchEl){
+        switchEl.classList.toggle('is-disabled', disableExclusive);
+        if(disableExclusive){ switchEl.setAttribute('aria-disabled', 'true'); }
+        else { switchEl.removeAttribute('aria-disabled'); }
+      }
+      const rowEl = input.closest('.a11y-subfeature');
+      if(rowEl){
+        rowEl.classList.toggle('is-disabled', disableExclusive);
+        if(disableExclusive){ rowEl.setAttribute('aria-disabled', 'true'); }
+        else { rowEl.removeAttribute('aria-disabled'); }
+      }
+    });
+  }
 
   function getColorblindShortName(slug){
     if(typeof slug !== 'string'){ return ''; }
@@ -284,6 +330,7 @@
       colorblindActiveFilters.delete(slug);
     }
     refreshColorblindFilters();
+    updateColorblindToggleAvailability();
   }
 
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
@@ -674,6 +721,9 @@
     const stored = Object.prototype.hasOwnProperty.call(featureState, key) ? !!featureState[key] : false;
     input.checked = stored;
     input.addEventListener('change', () => toggleFeature(key, input.checked));
+    if(isManagedColorblindSlug(key)){
+      updateColorblindToggleAvailability();
+    }
   }
 
   function buildSwitch(slug, ariaLabel){
