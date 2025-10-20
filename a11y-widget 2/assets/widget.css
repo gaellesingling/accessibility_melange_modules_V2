@@ -2,6 +2,59 @@
  * A11y Widget – styles
  * Scope: .a11y-*
  */
+/*
+ * Remote font sourcing avoids shipping binary assets in the repository
+ * while still letting the widget load typefaces on demand.
+ */
+@font-face {
+  font-family: 'OpenDyslexic';
+  src: url('https://raw.githubusercontent.com/antijingoist/open-dyslexic/master/woff/OpenDyslexic-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'OpenDyslexic Alta';
+  src: url('https://raw.githubusercontent.com/antijingoist/open-dyslexic/master/otf/OpenDyslexicAlta-Regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Luciole';
+  src: url('https://raw.githubusercontent.com/ardentboucan/luciole_font/main/luciole-regular-webfont.woff2') format('woff2'),
+       url('https://raw.githubusercontent.com/ardentboucan/luciole_font/main/luciole-regular-webfont.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('https://raw.githubusercontent.com/googlefonts/atkinson-hyperlegible/main/fonts/webfonts/AtkinsonHyperlegible-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Inconstant';
+  src: url('https://raw.githubusercontent.com/google/fonts/main/ofl/inconsolata/static/Inconsolata-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Accessible DfA';
+  src: url('https://raw.githubusercontent.com/Orange-OpenSource/font-accessible-dfa/main/AccessibleDfA-VF.woff2') format('woff2'),
+       url('https://raw.githubusercontent.com/Orange-OpenSource/font-accessible-dfa/main/AccessibleDfA-VF.woff') format('woff');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
   --a11y-primary: #d61e5b;
   --a11y-primary-contrast: #ffffff;

@@ -142,6 +142,12 @@
     verdana: '"Verdana", Geneva, sans-serif',
     trebuchet: '"Trebuchet MS", "Lucida Sans Unicode", "Lucida Grande", sans-serif',
     comic: '"Comic Sans MS", "Comic Sans", cursive, sans-serif',
+    open: '"OpenDyslexic", "Open Dyslexic", Arial, sans-serif',
+    dyslexic: '"OpenDyslexic Alta", "OpenDyslexicAlta", Arial, sans-serif',
+    luciole: '"Luciole", "Luciole Regular", Arial, sans-serif',
+    'atkinson-hyperlegible': '"Atkinson Hyperlegible", "AtkinsonHyperlegible", Arial, sans-serif',
+    'inconstant-regular': '"Inconstant", "Inconstant Regular", "Inconsolata", Arial, sans-serif',
+    'accessible-dfa': '"Accessible DfA", "AccessibleDfA", Arial, sans-serif',
   };
   const DYSLEXIA_DEFAULTS = {
     letter: '',
@@ -2128,6 +2134,12 @@ ${interactiveSelectors} {
       { value: 'verdana', label: texts.font_option_verdana || 'Verdana' },
       { value: 'trebuchet', label: texts.font_option_trebuchet || 'Trebuchet MS' },
       { value: 'comic', label: texts.font_option_comic || 'Comic Sans MS' },
+      { value: 'open', label: texts.font_option_open || 'OpenDyslexic' },
+      { value: 'dyslexic', label: texts.font_option_dyslexic || 'OpenDyslexic Alta' },
+      { value: 'luciole', label: texts.font_option_luciole || 'Luciole' },
+      { value: 'atkinson-hyperlegible', label: texts.font_option_atkinson || 'Atkinson Hyperlegible' },
+      { value: 'inconstant-regular', label: texts.font_option_inconstant || 'Inconstant' },
+      { value: 'accessible-dfa', label: texts.font_option_accessible_dfa || 'Accessible DfA' },
     ];
     fontOptions.forEach(option => {
       if(!option.label){ return; }
