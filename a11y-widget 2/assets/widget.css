@@ -1259,20 +1259,24 @@ html[data-a11y-demo-contraste="on"] body {
   top: var(--a11y-reading-guide-summary-top, 24px);
   width: min(90vw, 360px);
   max-width: min(90vw, 360px);
+  max-height: min(80vh, 520px);
   background: #ffffff;
   border: 1px solid var(--a11y-border);
   border-radius: 14px;
   padding: 18px 20px;
   box-shadow: 0 10px 24px rgba(0,0,0,.12);
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 12px;
   cursor: grab;
-  touch-action: none;
+  touch-action: auto;
+  overflow: hidden;
   z-index: var(--a11y-z-panel);
 }
 
 .a11y-reading-guide-summary.is-dragging {
   cursor: grabbing;
+  touch-action: none;
 }
 
 .a11y-reading-guide-summary__title {
@@ -1281,11 +1285,21 @@ html[data-a11y-demo-contraste="on"] body {
   font-weight: 700;
 }
 
+.a11y-reading-guide-summary__content {
+  overflow: auto;
+  max-height: 100%;
+  padding-right: 4px;
+  margin-right: -4px;
+  scrollbar-gutter: stable both-edges;
+  overscroll-behavior: contain;
+}
+
 .a11y-reading-guide-summary__list {
   list-style: decimal;
   padding-left: 20px;
   margin: 0;
   display: block;
+  min-height: 0;
 }
 
 .a11y-reading-guide-summary__list .a11y-reading-guide-summary__list {
@@ -1310,13 +1324,6 @@ html[data-a11y-demo-contraste="on"] body {
 .a11y-reading-guide-summary__link:focus-visible {
   outline: 2px solid var(--a11y-primary);
   outline-offset: 2px;
-}
-
-.a11y-reading-guide-summary__excerpt {
-  margin: 4px 0 0;
-  color: var(--a11y-text-subtle);
-  font-size: .875rem;
-  line-height: 1.4;
 }
 
 html.a11y-reading-guide-focus {
