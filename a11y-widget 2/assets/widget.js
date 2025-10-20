@@ -206,8 +206,122 @@
     'vision-daltonisme-achromatopsie': { grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
   };
 
+  const COLORBLIND_COMBINATION_RULES = [
+    {
+      requiredActive: [
+        'vision-daltonisme-deuteranopie',
+        'vision-daltonisme-protanopie',
+        'vision-daltonisme-protanomalie',
+        'vision-daltonisme-tritanopie',
+        'vision-daltonisme-tritanomalie',
+      ],
+      disabled: [
+        'vision-daltonisme-deuteranomalie',
+        'vision-daltonisme-achromatopsie',
+      ],
+    },
+    {
+      requiredActive: [
+        'vision-daltonisme-deuteranomalie',
+        'vision-daltonisme-protanopie',
+        'vision-daltonisme-protanomalie',
+        'vision-daltonisme-tritanopie',
+        'vision-daltonisme-tritanomalie',
+      ],
+      disabled: [
+        'vision-daltonisme-deuteranopie',
+        'vision-daltonisme-achromatopsie',
+      ],
+    },
+    {
+      requiredActive: [
+        'vision-daltonisme-protanopie',
+        'vision-daltonisme-deuteranopie',
+        'vision-daltonisme-deuteranomalie',
+        'vision-daltonisme-tritanopie',
+        'vision-daltonisme-tritanomalie',
+      ],
+      disabled: [
+        'vision-daltonisme-protanomalie',
+        'vision-daltonisme-achromatopsie',
+      ],
+    },
+  ];
+
+  const COLORBLIND_DISABLE_TARGETS = (() => {
+    const set = new Set();
+    COLORBLIND_COMBINATION_RULES.forEach(rule => {
+      if(!rule){ return; }
+      const list = Array.isArray(rule.disabled) ? rule.disabled : [];
+      list.forEach(slug => {
+        if(typeof slug === 'string' && slug){
+          set.add(slug);
+        }
+      });
+    });
+    return set;
+  })();
+
+  const COLORBLIND_CONTROLLED_SET = new Set(COLORBLIND_DISABLE_TARGETS);
+  let isUpdatingColorblindAvailability = false;
+
   const colorblindActiveFilters = new Set();
   const colorblindRootClasses = new Set();
+
+  function isManagedColorblindSlug(slug){
+    return COLORBLIND_CONTROLLED_SET.has(slug);
+  }
+
+  function getActiveColorblindDisabledSlugs(){
+    const disabled = new Set();
+    COLORBLIND_COMBINATION_RULES.forEach(rule => {
+      if(!rule){ return; }
+      const required = Array.isArray(rule.requiredActive) ? rule.requiredActive : [];
+      if(!required.length){ return; }
+      const allActive = required.every(slug => colorblindActiveFilters.has(slug));
+      if(!allActive){ return; }
+      const targets = Array.isArray(rule.disabled) ? rule.disabled : [];
+      targets.forEach(slug => {
+        if(typeof slug === 'string' && slug){
+          disabled.add(slug);
+        }
+      });
+    });
+    return disabled;
+  }
+
+  function updateColorblindToggleAvailability(){
+    if(isUpdatingColorblindAvailability){ return; }
+    isUpdatingColorblindAvailability = true;
+    const disabledSlugs = getActiveColorblindDisabledSlugs();
+    COLORBLIND_DISABLE_TARGETS.forEach(slug => {
+      const input = featureInputs.get(slug);
+      const shouldDisable = disabledSlugs.has(slug);
+      if(input){
+        if(input.disabled !== shouldDisable){
+          input.disabled = shouldDisable;
+        }
+        const switchEl = input.closest('.a11y-switch');
+        if(switchEl){
+          switchEl.classList.toggle('is-disabled', shouldDisable);
+          if(shouldDisable){ switchEl.setAttribute('aria-disabled', 'true'); }
+          else { switchEl.removeAttribute('aria-disabled'); }
+        }
+        const rowEl = input.closest('.a11y-subfeature');
+        if(rowEl){
+          rowEl.classList.toggle('is-disabled', shouldDisable);
+          if(shouldDisable){ rowEl.setAttribute('aria-disabled', 'true'); }
+          else { rowEl.removeAttribute('aria-disabled'); }
+        }
+      }
+    });
+    isUpdatingColorblindAvailability = false;
+    disabledSlugs.forEach(slug => {
+      if(colorblindActiveFilters.has(slug)){
+        toggleFeature(slug, false);
+      }
+    });
+  }
 
   function getColorblindShortName(slug){
     if(typeof slug !== 'string'){ return ''; }
@@ -284,6 +398,7 @@
       colorblindActiveFilters.delete(slug);
     }
     refreshColorblindFilters();
+    updateColorblindToggleAvailability();
   }
 
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
@@ -674,6 +789,9 @@
     const stored = Object.prototype.hasOwnProperty.call(featureState, key) ? !!featureState[key] : false;
     input.checked = stored;
     input.addEventListener('change', () => toggleFeature(key, input.checked));
+    if(isManagedColorblindSlug(key)){
+      updateColorblindToggleAvailability();
+    }
   }
 
   function buildSwitch(slug, ariaLabel){
