@@ -2581,15 +2581,147 @@ ${interactiveSelectors} {
     buildReadingGuideSummary(container, headings, selector);
   }
 
+  const FRENCH_VOWEL_REGEX = /[aeiouyàâäéèêëîïôöùûüÿœ]/i;
+  const FRENCH_DIPHTHONGS = new Set([
+    'ai','au','ay','ei','eu','ey','oi','oy','ou','ui','uy','œu','eau','ea'
+  ]);
+  const FRENCH_COMPLEX_ONSETS = new Set([
+    'bl','br','cl','cr','dr','fl','fr','gl','gr','pl','pr','tr','vr','gn','ch','ph','th','sc','sk','sl',
+    'sm','sn','sp','st','sf','sv','sw','qu','gu','chr','phr','thr','sch','scr','spl','spr','sph','str','squ'
+  ]);
+
+  function stripFrenchDiacritics(str){
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/œ/g, 'oe')
+      .replace(/æ/g, 'ae');
+  }
+
+  function isFrenchVowel(char){
+    return typeof char === 'string' && FRENCH_VOWEL_REGEX.test(char);
+  }
+
+  function isFrenchDiphthongPair(letters, index){
+    if(!Array.isArray(letters) || index <= 0 || index >= letters.length){ return false; }
+    const prevChar = letters[index - 1];
+    const nextChar = letters[index];
+    if(typeof prevChar !== 'string' || typeof nextChar !== 'string'){ return false; }
+    const pair = (prevChar + nextChar).toLowerCase();
+    const plainPair = stripFrenchDiacritics(pair);
+    if(FRENCH_DIPHTHONGS.has(plainPair)){ return true; }
+    if(plainPair === 'io'){ 
+      const beforePrev = index >= 2 ? stripFrenchDiacritics(letters[index - 2].toLowerCase()) : '';
+      if(beforePrev && /[cdfgkprstvxz]/.test(beforePrev)){ return true; }
+    }
+    if(plainPair === 'ea' && index + 1 < letters.length){
+      const nextNext = stripFrenchDiacritics(letters[index + 1].toLowerCase());
+      if(nextNext === 'u'){ return true; }
+    }
+    return false;
+  }
+
+  function isValidFrenchOnset(cluster){
+    if(!cluster){ return false; }
+    const plain = stripFrenchDiacritics(cluster.toLowerCase());
+    if(plain.length <= 1){ return plain !== 'h'; }
+    if(FRENCH_COMPLEX_ONSETS.has(plain)){ return true; }
+    if(plain.length === 3){
+      const lastTwo = plain.slice(1);
+      if(FRENCH_COMPLEX_ONSETS.has(lastTwo)){ return true; }
+    }
+    if(plain.length > 3){ return false; }
+    return false;
+  }
+
+  function chooseFrenchSyllableSplit(cluster){
+    if(!cluster){ return 0; }
+    const plainCluster = stripFrenchDiacritics(cluster.toLowerCase());
+    if(plainCluster.length <= 2 && isValidFrenchOnset(plainCluster)){ return 0; }
+    if(cluster.length === 1){ return 0; }
+    for(let offset = 1; offset < cluster.length; offset++){
+      const remainder = cluster.slice(offset);
+      if(isValidFrenchOnset(stripFrenchDiacritics(remainder.toLowerCase()))){ return offset; }
+    }
+    return cluster.length - 1;
+  }
+
+  function mergeFrenchTerminalMuteE(syllables){
+    if(!Array.isArray(syllables) || syllables.length < 2){ return syllables; }
+    for(let i = 1; i < syllables.length; i++){
+      const syllable = syllables[i];
+      if(typeof syllable !== 'string'){ continue; }
+      const lower = stripFrenchDiacritics(syllable.toLowerCase());
+      if(lower === 'e' || lower === 'es' || lower === 'ent'){
+        syllables[i - 1] += syllable;
+        syllables.splice(i, 1);
+        i--;
+      }
+    }
+    return syllables;
+  }
+
   function syllabifyReadingGuideWord(word){
     if(typeof word !== 'string' || word.length < 6){ return word; }
-    const pattern = /([aeiouyàâäéèêëîïôöùûüœ])([bcdfghjklmnpqrstvwxz]{1,2})(?=[aeiouyàâäéèêëîïôöùûüœ])/gi;
-    let result = word.replace(pattern, '$1·$2');
-    if(result === word){
-      const mid = Math.floor(word.length / 2);
-      result = `${word.slice(0, mid)}·${word.slice(mid)}`;
+    const letters = Array.from(word);
+    const syllables = [];
+    let index = 0;
+
+    while(index < letters.length){
+      let syllableStart = index;
+
+      while(index < letters.length && !isFrenchVowel(letters[index])){
+        index++;
+      }
+
+      if(index >= letters.length){
+        if(syllables.length){
+          syllables[syllables.length - 1] += letters.slice(syllableStart).join('');
+        } else {
+          syllables.push(letters.join(''));
+        }
+        break;
+      }
+
+      index++;
+      while(index < letters.length && isFrenchVowel(letters[index]) && isFrenchDiphthongPair(letters, index)){
+        index++;
+      }
+
+      let consonantStart = index;
+      while(index < letters.length && !isFrenchVowel(letters[index])){
+        index++;
+      }
+
+      if(index >= letters.length){
+        syllables.push(letters.slice(syllableStart).join(''));
+        break;
+      }
+
+      const clusterLength = consonantStart < index ? index - consonantStart : 0;
+      if(clusterLength === 0){
+        syllables.push(letters.slice(syllableStart, index).join(''));
+        continue;
+      }
+
+      const cluster = letters.slice(consonantStart, index).join('');
+      const splitOffset = chooseFrenchSyllableSplit(cluster);
+      const syllableEnd = consonantStart + splitOffset;
+      syllables.push(letters.slice(syllableStart, syllableEnd).join(''));
+      index = syllableEnd;
     }
-    return result;
+
+    if(index < letters.length){
+      syllables.push(letters.slice(index).join(''));
+    }
+
+    mergeFrenchTerminalMuteE(syllables);
+    const cleaned = syllables.filter(Boolean).join('·');
+    if(!cleaned.includes('·')){
+      const mid = Math.floor(word.length / 2);
+      return `${word.slice(0, mid)}·${word.slice(mid)}`;
+    }
+    return cleaned;
   }
 
   function insertReadingGuideMiddots(text){
