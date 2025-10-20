@@ -2722,7 +2722,7 @@ ${interactiveSelectors} {
         result[result.length - 1] += originalCharacters[i];
       }
     }
-    return result;
+    return cleaned;
   }
 
   function mergeFrenchTerminalMuteE(syllables){
