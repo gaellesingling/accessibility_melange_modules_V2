@@ -1,0 +1,71 @@
+{
+  "name": "reading-guide",
+  "title": "Guide de Lecture",
+  "description": "Outils d'aide à la lecture : règle, syllabes, sommaire et mode focus",
+  "version": "1.0.0",
+  "author": "Accessibility Modular",
+  "category": "lecture",
+  "icon": "📖",
+  "enabled": true,
+  "priority": 15,
+  "rgaa_criteria": [
+    "10.7"
+  ],
+  "wcag_criteria": [
+    "1.4.8",
+    "2.4.5"
+  ],
+  "conformity_level": "AA",
+  "features": [
+    {
+      "id": "ruler",
+      "label": "Règle de lecture",
+      "type": "toggle",
+      "default": false,
+      "icon": "📏",
+      "description": "Règle qui suit le curseur pour faciliter la lecture"
+    },
+    {
+      "id": "syllables",
+      "label": "Division des syllabes",
+      "type": "toggle",
+      "default": false,
+      "icon": "✂️",
+      "description": "Sépare les mots en syllabes avec un point médian"
+    },
+    {
+      "id": "toc",
+      "label": "Sommaire",
+      "type": "toggle",
+      "default": false,
+      "icon": "📑",
+      "description": "Génère un sommaire interactif des titres"
+    },
+    {
+      "id": "focus",
+      "label": "Mode focus",
+      "type": "toggle",
+      "default": false,
+      "icon": "🎯",
+      "description": "Masque les éléments de distraction"
+    }
+  ],
+  "cookies": [
+    "acc_reading_ruler",
+    "acc_reading_syllables",
+    "acc_reading_toc",
+    "acc_reading_focus"
+  ],
+  "dependencies": [],
+  "target_elements": [
+    "p",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "li",
+    "article"
+  ]
+}
