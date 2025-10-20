@@ -2287,14 +2287,25 @@ ${interactiveSelectors} {
 
   function getReadingGuideContentScopes(){
     const scopes = [];
+    const seen = new Set();
+    const addScope = node => {
+      if(!node || seen.has(node)){ return; }
+      seen.add(node);
+      scopes.push(node);
+    };
+
     const attrSelector = getReadingGuideAttributeSelector('contentAttribute');
     if(attrSelector){
-      document.querySelectorAll(attrSelector).forEach(node => { if(node && !scopes.includes(node)){ scopes.push(node); } });
+      document.querySelectorAll(attrSelector).forEach(addScope);
     }
-    if(!scopes.length){
-      if(document.querySelector('main')){ scopes.push(document.querySelector('main')); }
-    }
-    if(!scopes.length && document.body){ scopes.push(document.body); }
+
+    document.querySelectorAll('[data-reading-guide-content]').forEach(addScope);
+
+    const main = document.querySelector('main');
+    if(main){ addScope(main); }
+
+    if(document.body){ addScope(document.body); }
+
     return scopes.filter(Boolean);
   }
 
