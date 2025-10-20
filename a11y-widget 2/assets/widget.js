@@ -358,6 +358,7 @@
     syllableAttribute: 'data-reading-guide-syllables',
     animationExemptAttribute: 'data-reading-guide-allow-animation',
   };
+  const READING_GUIDE_GLOBAL_HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
   const readingGuideInstances = new Set();
   let readingGuideSettings = loadReadingGuideSettings();
   let readingGuideActive = false;
@@ -2310,9 +2311,19 @@ ${interactiveSelectors} {
       try {
         found = Array.from(scope.querySelectorAll(selector));
       } catch(err){
+        found = [];
+      }
+      if(!found.length){
         try {
           found = Array.from(scope.querySelectorAll(READING_GUIDE_DEFAULT_SELECTORS.headings));
         } catch(err2){
+          found = [];
+        }
+      }
+      if(!found.length){
+        try {
+          found = Array.from(scope.querySelectorAll(READING_GUIDE_GLOBAL_HEADINGS));
+        } catch(err3){
           found = [];
         }
       }
@@ -2491,6 +2502,7 @@ ${interactiveSelectors} {
       heightSlider,
       heightValue,
       summaryToggle,
+      summaryAdvancedDetails,
       summarySelectorInput,
       summaryContainerInput,
       summaryTitleInput,
@@ -2535,18 +2547,28 @@ ${interactiveSelectors} {
       summaryToggle.disabled = !active;
       setCheckboxState(summaryToggle, !!readingGuideSettings.summaryEnabled);
     }
+    const summaryBaseDisabled = !active || !readingGuideSettings.summaryEnabled;
+    let summaryAdvancedEnabled = true;
+    if(summaryAdvancedDetails){
+      summaryAdvancedDetails.classList.toggle('is-disabled', summaryBaseDisabled);
+      if(summaryBaseDisabled){ summaryAdvancedDetails.setAttribute('data-disabled', 'true'); }
+      else { summaryAdvancedDetails.removeAttribute('data-disabled'); }
+      if(summaryBaseDisabled && summaryAdvancedDetails.open){ summaryAdvancedDetails.open = false; }
+      summaryAdvancedEnabled = summaryAdvancedDetails.open && !summaryBaseDisabled;
+    }
+    const summaryInputsDisabled = summaryBaseDisabled || !summaryAdvancedEnabled;
     if(summarySelectorInput){
-      summarySelectorInput.disabled = !active || !readingGuideSettings.summaryEnabled;
+      summarySelectorInput.disabled = summaryInputsDisabled;
       setInputValue(summarySelectorInput, readingGuideSettings.summarySelector || '');
       if(settings.summary_selector_placeholder){ summarySelectorInput.setAttribute('placeholder', settings.summary_selector_placeholder); }
     }
     if(summaryContainerInput){
-      summaryContainerInput.disabled = !active || !readingGuideSettings.summaryEnabled;
+      summaryContainerInput.disabled = summaryInputsDisabled;
       setInputValue(summaryContainerInput, readingGuideSettings.summaryContainer || '');
       if(settings.summary_container_placeholder){ summaryContainerInput.setAttribute('placeholder', settings.summary_container_placeholder); }
     }
     if(summaryTitleInput){
-      summaryTitleInput.disabled = !active || !readingGuideSettings.summaryEnabled;
+      summaryTitleInput.disabled = summaryInputsDisabled;
       setInputValue(summaryTitleInput, readingGuideSettings.summaryTitle || '');
       if(settings.summary_title_placeholder){ summaryTitleInput.setAttribute('placeholder', settings.summary_title_placeholder); }
     }
@@ -2764,6 +2786,16 @@ ${interactiveSelectors} {
     summaryToggleWrap.appendChild(summaryToggleText);
     summarySection.appendChild(summaryToggleWrap);
 
+    const summaryAdvancedDetails = document.createElement('details');
+    summaryAdvancedDetails.className = 'a11y-reading-guide__advanced';
+    const summaryAdvancedSummary = document.createElement('summary');
+    summaryAdvancedSummary.className = 'a11y-reading-guide__advanced-summary';
+    summaryAdvancedSummary.textContent = settings.summary_advanced_label || 'Options avancées';
+    summaryAdvancedDetails.appendChild(summaryAdvancedSummary);
+    const summaryAdvancedContent = document.createElement('div');
+    summaryAdvancedContent.className = 'a11y-reading-guide__advanced-content';
+    summaryAdvancedDetails.appendChild(summaryAdvancedContent);
+
     const summarySelectorField = document.createElement('div');
     summarySelectorField.className = 'a11y-reading-guide__field';
     const summarySelectorLabel = document.createElement('label');
@@ -2780,7 +2812,7 @@ ${interactiveSelectors} {
       summarySelectorHint.textContent = settings.summary_selector_hint;
       summarySelectorField.appendChild(summarySelectorHint);
     }
-    summarySection.appendChild(summarySelectorField);
+    summaryAdvancedContent.appendChild(summarySelectorField);
 
     const summaryContainerField = document.createElement('div');
     summaryContainerField.className = 'a11y-reading-guide__field';
@@ -2798,7 +2830,7 @@ ${interactiveSelectors} {
       summaryContainerHint.textContent = settings.summary_container_hint;
       summaryContainerField.appendChild(summaryContainerHint);
     }
-    summarySection.appendChild(summaryContainerField);
+    summaryAdvancedContent.appendChild(summaryContainerField);
 
     const summaryTitleField = document.createElement('div');
     summaryTitleField.className = 'a11y-reading-guide__field';
@@ -2810,7 +2842,9 @@ ${interactiveSelectors} {
     summaryTitleInput.className = 'a11y-reading-guide__input';
     summaryTitleLabel.appendChild(summaryTitleInput);
     summaryTitleField.appendChild(summaryTitleLabel);
-    summarySection.appendChild(summaryTitleField);
+    summaryAdvancedContent.appendChild(summaryTitleField);
+
+    summarySection.appendChild(summaryAdvancedDetails);
 
     controls.appendChild(summarySection);
 
@@ -2889,6 +2923,7 @@ ${interactiveSelectors} {
       heightSlider,
       heightValue,
       summaryToggle,
+      summaryAdvancedDetails,
       summarySelectorInput,
       summaryContainerInput,
       summaryTitleInput,
@@ -2898,6 +2933,10 @@ ${interactiveSelectors} {
       settings,
       wasConnected: false,
     };
+
+    if(summaryAdvancedDetails){
+      summaryAdvancedDetails.addEventListener('toggle', () => updateReadingGuideInstanceUI(instance));
+    }
 
     readingGuideInstances.add(instance);
     syncReadingGuideInstances();
