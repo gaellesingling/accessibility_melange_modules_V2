@@ -358,6 +358,7 @@
     syllableAttribute: 'data-reading-guide-syllables',
     animationExemptAttribute: 'data-reading-guide-allow-animation',
   };
+  const READING_GUIDE_GLOBAL_HEADINGS = 'h1, h2, h3, h4, h5, h6, [role="heading"]';
   const readingGuideInstances = new Set();
   let readingGuideSettings = loadReadingGuideSettings();
   let readingGuideActive = false;
@@ -2310,9 +2311,19 @@ ${interactiveSelectors} {
       try {
         found = Array.from(scope.querySelectorAll(selector));
       } catch(err){
+        found = [];
+      }
+      if(!found.length){
         try {
           found = Array.from(scope.querySelectorAll(READING_GUIDE_DEFAULT_SELECTORS.headings));
         } catch(err2){
+          found = [];
+        }
+      }
+      if(!found.length){
+        try {
+          found = Array.from(scope.querySelectorAll(READING_GUIDE_GLOBAL_HEADINGS));
+        } catch(err3){
           found = [];
         }
       }
