@@ -202,7 +202,7 @@ function a11y_widget_get_default_sections() {
                         'height_label'                   => __( 'Hauteur', 'a11y-widget' ),
                         'height_hint'                    => __( 'Définissez l’épaisseur de la règle (en pixels).', 'a11y-widget' ),
                         'summary_label'                  => __( 'Sommaire automatique', 'a11y-widget' ),
-                        'summary_hint'                   => __( 'Génère un sommaire à partir des titres détectés.', 'a11y-widget' ),
+                        'summary_hint'                   => __( 'Génère un sommaire à partir des titres détectés et extrait un résumé via les éléments balisés (ex. data-reading-guide-summary).', 'a11y-widget' ),
                         'summary_toggle_label'           => __( 'Activer le sommaire', 'a11y-widget' ),
                         'summary_selector_label'         => __( 'Titres à inclure', 'a11y-widget' ),
                         'summary_selector_hint'          => __( 'Sélecteur CSS pour les titres. Ajoutez l’attribut data-reading-guide-content sur un conteneur pour limiter la recherche.', 'a11y-widget' ),

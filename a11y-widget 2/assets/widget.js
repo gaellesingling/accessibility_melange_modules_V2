@@ -2111,7 +2111,142 @@ ${interactiveSelectors} {
     return candidate;
   }
 
-  function buildReadingGuideSummary(container, headings){
+  function getReadingGuideHeadingLevel(heading){
+    if(!(heading instanceof Element)){ return 6; }
+    const dataLevel = heading.getAttribute('data-reading-guide-level');
+    if(dataLevel){
+      const parsed = parseInt(dataLevel, 10);
+      if(!Number.isNaN(parsed) && parsed >= 1 && parsed <= 6){ return parsed; }
+    }
+    const ariaLevel = heading.getAttribute('aria-level');
+    if(ariaLevel){
+      const parsed = parseInt(ariaLevel, 10);
+      if(!Number.isNaN(parsed) && parsed >= 1 && parsed <= 6){ return parsed; }
+    }
+    const tag = typeof heading.tagName === 'string' ? heading.tagName.toUpperCase() : '';
+    const match = /^H([1-6])$/.exec(tag);
+    if(match){ return parseInt(match[1], 10); }
+    return 6;
+  }
+
+  function isReadingGuideHeadingCandidate(element, selector){
+    if(!(element instanceof Element)){ return false; }
+    const tag = element.tagName ? element.tagName.toUpperCase() : '';
+    if(/^H[1-6]$/.test(tag)){ return true; }
+    if(element.hasAttribute('data-reading-guide-level')){ return true; }
+    if(element.getAttribute && element.getAttribute('role') === 'heading'){ return true; }
+    if(selector){
+      try {
+        if(element.matches(selector)){ return true; }
+      } catch(err){ /* ignore */ }
+    }
+    return false;
+  }
+
+  function extractReadingGuideSectionSummary(heading, selector){
+    if(!(heading instanceof Element)){ return ''; }
+    const maxLength = 320;
+    const preferredSelectors = [
+      '[data-reading-guide-summary]',
+      'p',
+      'li',
+      '[role="paragraph"]'
+    ];
+    const currentLevel = getReadingGuideHeadingLevel(heading);
+    let sibling = heading.nextElementSibling;
+    const collected = [];
+    while(sibling){
+      if(isReadingGuideHeadingCandidate(sibling, selector)){
+        const siblingLevel = getReadingGuideHeadingLevel(sibling);
+        if(siblingLevel <= currentLevel){ break; }
+      }
+      let text = '';
+      if(sibling.hasAttribute && sibling.hasAttribute('data-reading-guide-summary')){
+        text = sibling.getAttribute('data-reading-guide-summary') || sibling.textContent || '';
+      } else {
+        const target = preferredSelectors.reduce((found, sel) => {
+          if(found){ return found; }
+          try {
+            return sibling.matches(sel) ? sibling : sibling.querySelector(sel);
+          } catch(err){
+            return found;
+          }
+        }, null);
+        if(target){ text = target.textContent || ''; }
+      }
+      text = text.replace(/\s+/g, ' ').trim();
+      if(text){
+        collected.push(text);
+        if(collected.join(' ').length >= maxLength){ break; }
+      }
+      sibling = sibling.nextElementSibling;
+    }
+    if(!collected.length){ return ''; }
+    const full = collected.join(' ').replace(/\s+/g, ' ').trim();
+    if(!full){ return ''; }
+    if(full.length <= maxLength){ return full; }
+    const clipped = full.slice(0, maxLength);
+    const trimmed = clipped.replace(/[,;:\-\s]+\S*$/, '').trim();
+    const safe = trimmed || clipped.trim();
+    return safe ? `${safe}…` : '';
+  }
+
+  function buildReadingGuideSummaryTree(headings, selector){
+    const nodes = [];
+    const stack = [];
+    headings.forEach((heading, index) => {
+      const level = getReadingGuideHeadingLevel(heading);
+      const node = {
+        heading,
+        level,
+        index,
+        children: [],
+        summary: extractReadingGuideSectionSummary(heading, selector)
+      };
+      while(stack.length && stack[stack.length - 1].level >= level){
+        stack.pop();
+      }
+      if(!stack.length){
+        nodes.push(node);
+      } else {
+        stack[stack.length - 1].children.push(node);
+      }
+      stack.push(node);
+    });
+    return nodes;
+  }
+
+  function createReadingGuideSummaryList(nodes){
+    const list = document.createElement('ol');
+    list.className = 'a11y-reading-guide-summary__list';
+    nodes.forEach(node => {
+      const heading = node.heading;
+      const id = ensureReadingGuideHeadingId(heading, node.index);
+      const text = heading.textContent || heading.getAttribute('aria-label') || id;
+      const item = document.createElement('li');
+      item.className = 'a11y-reading-guide-summary__item';
+      const link = document.createElement('a');
+      link.className = 'a11y-reading-guide-summary__link';
+      link.href = `#${id}`;
+      link.textContent = text.replace(/\s+/g, ' ').trim();
+      item.appendChild(link);
+      if(node.summary){
+        const excerpt = document.createElement('p');
+        excerpt.className = 'a11y-reading-guide-summary__excerpt';
+        excerpt.textContent = node.summary;
+        item.appendChild(excerpt);
+      }
+      if(node.children.length){
+        const childList = createReadingGuideSummaryList(node.children);
+        childList.setAttribute('aria-label', link.textContent);
+        item.appendChild(childList);
+      }
+      list.appendChild(item);
+    });
+    return list;
+  }
+
+  function buildReadingGuideSummary(container, headings, selector){
     if(!container){ return; }
     container.classList.add('a11y-reading-guide-summary');
     container.innerHTML = '';
@@ -2128,20 +2263,8 @@ ${interactiveSelectors} {
       container.setAttribute('aria-label', titleText);
     }
     container.setAttribute('role', 'navigation');
-    const list = document.createElement('ol');
-    list.className = 'a11y-reading-guide-summary__list';
-    headings.forEach((heading, index) => {
-      const id = ensureReadingGuideHeadingId(heading, index);
-      const text = heading.textContent || heading.getAttribute('aria-label') || id;
-      const item = document.createElement('li');
-      item.className = 'a11y-reading-guide-summary__item';
-      const link = document.createElement('a');
-      link.className = 'a11y-reading-guide-summary__link';
-      link.href = `#${id}`;
-      link.textContent = text.trim();
-      item.appendChild(link);
-      list.appendChild(item);
-    });
+    const tree = buildReadingGuideSummaryTree(headings, selector);
+    const list = createReadingGuideSummaryList(tree);
     container.appendChild(list);
     container.dataset.readingGuideSummary = 'on';
     readingGuideSummaryEl = container;
@@ -2202,7 +2325,7 @@ ${interactiveSelectors} {
     if(!headings.length){ return; }
     const container = resolveReadingGuideSummaryContainer();
     if(!container){ return; }
-    buildReadingGuideSummary(container, headings);
+    buildReadingGuideSummary(container, headings, selector);
   }
 
   function syllabifyReadingGuideWord(word){

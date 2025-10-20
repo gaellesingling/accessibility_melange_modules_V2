@@ -61,6 +61,7 @@
   --a11y-surface: #ffffff;
   --a11y-surface-elev: #f7f7f8;
   --a11y-text: #1e1e20;
+  --a11y-text-subtle: #4b5563;
   --a11y-border: #e6e6ea;
   --a11y-shadow: 0 10px 24px rgba(0,0,0,.16);
   --a11y-radius: 16px;
@@ -1270,15 +1271,23 @@ html[data-a11y-demo-contraste="on"] body {
 }
 
 .a11y-reading-guide-summary__list {
-  list-style: none;
-  padding: 0;
+  list-style: decimal;
+  padding-left: 20px;
   margin: 0;
-  display: grid;
-  gap: 8px;
+  display: block;
+}
+
+.a11y-reading-guide-summary__list .a11y-reading-guide-summary__list {
+  margin-top: 8px;
+  list-style: lower-alpha;
 }
 
 .a11y-reading-guide-summary__item {
-  margin: 0;
+  margin: 0 0 10px;
+}
+
+.a11y-reading-guide-summary__item:last-child {
+  margin-bottom: 0;
 }
 
 .a11y-reading-guide-summary__link {
@@ -1290,6 +1299,13 @@ html[data-a11y-demo-contraste="on"] body {
 .a11y-reading-guide-summary__link:focus-visible {
   outline: 2px solid var(--a11y-primary);
   outline-offset: 2px;
+}
+
+.a11y-reading-guide-summary__excerpt {
+  margin: 4px 0 0;
+  color: var(--a11y-text-subtle);
+  font-size: .875rem;
+  line-height: 1.4;
 }
 
 html.a11y-reading-guide-focus {
