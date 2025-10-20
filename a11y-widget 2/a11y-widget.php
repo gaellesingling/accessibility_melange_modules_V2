@@ -65,6 +65,10 @@ function a11y_widget_markup() {
  * @return array[]
  */
 function a11y_widget_get_default_sections() {
+    $heading_selector = function_exists( 'a11y_widget_get_reading_guide_heading_selector' )
+        ? a11y_widget_get_reading_guide_heading_selector()
+        : 'main h2, main h3';
+
     return array(
         array(
             'slug'     => 'vision',
@@ -202,18 +206,9 @@ function a11y_widget_get_default_sections() {
                         'height_label'                   => __( 'Hauteur', 'a11y-widget' ),
                         'height_hint'                    => __( 'Définissez l’épaisseur de la règle (en pixels).', 'a11y-widget' ),
                         'summary_label'                  => __( 'Sommaire automatique', 'a11y-widget' ),
-                        'summary_hint'                   => __( 'Active un sommaire et un résumé générés automatiquement à partir des titres détectés. Ajustez-les uniquement si besoin dans les options avancées.', 'a11y-widget' ),
+                        'summary_hint'                   => __( 'Active un sommaire généré automatiquement selon les niveaux de titres définis dans l’administration.', 'a11y-widget' ),
                         'summary_toggle_label'           => __( 'Activer le sommaire', 'a11y-widget' ),
-                        'summary_selector_label'         => __( 'Titres à inclure', 'a11y-widget' ),
-                        'summary_selector_hint'          => __( 'Optionnel : définissez un sélecteur CSS pour préciser les titres à analyser. Par défaut, les principaux titres de la page sont détectés automatiquement.', 'a11y-widget' ),
-                        'summary_selector_placeholder'   => __( 'Ex. main h2, main h3', 'a11y-widget' ),
-                        'summary_container_label'        => __( 'Conteneur du sommaire', 'a11y-widget' ),
-                        'summary_container_hint'         => __( 'Optionnel : indiquez un conteneur existant (ou un attribut data-reading-guide-toc) pour héberger le sommaire. Sans valeur, un panneau flottant est affiché.', 'a11y-widget' ),
-                        'summary_container_placeholder'  => __( 'Ex. [data-reading-guide-toc]', 'a11y-widget' ),
-                        'summary_title_label'            => __( 'Titre du sommaire', 'a11y-widget' ),
                         'summary_title_default'          => __( 'Sommaire', 'a11y-widget' ),
-                        'summary_title_placeholder'      => __( 'Ex. Sommaire de la page', 'a11y-widget' ),
-                        'summary_advanced_label'         => __( 'Options avancées', 'a11y-widget' ),
                         'syllable_label'                 => __( 'Séparation syllabique', 'a11y-widget' ),
                         'syllable_hint'                  => __( 'Insère des points médians dans les mots longs pour rythmer la lecture.', 'a11y-widget' ),
                         'syllable_toggle_label'          => __( 'Activer la séparation syllabique', 'a11y-widget' ),
@@ -225,7 +220,7 @@ function a11y_widget_get_default_sections() {
                         'focus_hint'                     => __( 'Réduit les animations et transitions pour limiter les distractions. Ajoutez l’attribut data-reading-guide-allow-animation sur les éléments à préserver.', 'a11y-widget' ),
                         'focus_toggle_label'             => __( 'Activer le mode focus', 'a11y-widget' ),
                         'selectors'                      => array(
-                            'headings'                      => 'main h2, main h3',
+                            'headings'                      => $heading_selector,
                             'content_attribute'             => 'data-reading-guide-content',
                             'toc_attribute'                 => 'data-reading-guide-toc',
                             'toc_title_attribute'           => 'data-reading-guide-toc-title',
