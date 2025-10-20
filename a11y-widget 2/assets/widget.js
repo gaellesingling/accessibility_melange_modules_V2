@@ -330,6 +330,46 @@
   let dyslexiaActive = false;
   let dyslexiaStyleElement = null;
 
+  const READING_GUIDE_SLUG = 'cognitif-reading-guide';
+  const READING_GUIDE_SETTINGS_KEY = 'a11y-widget-reading-guide-settings:v1';
+  const READING_GUIDE_HEIGHT_MIN = 40;
+  const READING_GUIDE_HEIGHT_MAX = 320;
+  const READING_GUIDE_HEIGHT_STEP = 4;
+  const READING_GUIDE_OPACITY_MIN = 0.1;
+  const READING_GUIDE_OPACITY_MAX = 1;
+  const READING_GUIDE_OPACITY_STEP = 0.05;
+  const READING_GUIDE_DEFAULTS = {
+    color: '#ffe28a',
+    opacity: 0.65,
+    height: 120,
+    summaryEnabled: false,
+    summarySelector: '',
+    summaryContainer: '',
+    summaryTitle: '',
+    syllableEnabled: false,
+    syllableSelector: 'main p, main li',
+    focusEnabled: false,
+  };
+  const READING_GUIDE_DEFAULT_SELECTORS = {
+    headings: 'main h2, main h3',
+    contentAttribute: 'data-reading-guide-content',
+    tocAttribute: 'data-reading-guide-toc',
+    tocTitleAttribute: 'data-reading-guide-toc-title',
+    syllableAttribute: 'data-reading-guide-syllables',
+    animationExemptAttribute: 'data-reading-guide-allow-animation',
+  };
+  const readingGuideInstances = new Set();
+  let readingGuideSettings = loadReadingGuideSettings();
+  let readingGuideActive = false;
+  let readingGuideOverlayEl = null;
+  let readingGuideSummaryEl = null;
+  let readingGuideFocusClassApplied = false;
+  let readingGuidePointerY = null;
+  const readingGuideTextNodes = new Map();
+  const readingGuideCleanup = [];
+  let readingGuideSelectorConfig = Object.assign({}, READING_GUIDE_DEFAULT_SELECTORS);
+  let readingGuideTexts = { summaryTitleFallback: 'Sommaire' };
+
   const CURSOR_SLUG = 'moteur-curseur';
   const CURSOR_SETTINGS_KEY = 'a11y-widget-cursor-settings:v1';
   const CURSOR_BASE_SIZE = 24;
@@ -1745,6 +1785,1036 @@ ${interactiveSelectors} {
     }
   }
 
+  function clampReadingGuideHeight(value){
+    const numeric = Number(value);
+    if(!Number.isFinite(numeric)){ return READING_GUIDE_DEFAULTS.height; }
+    const clamped = Math.min(READING_GUIDE_HEIGHT_MAX, Math.max(READING_GUIDE_HEIGHT_MIN, numeric));
+    return Math.round(clamped);
+  }
+
+  function clampReadingGuideOpacity(value){
+    const numeric = Number(value);
+    if(!Number.isFinite(numeric)){ return READING_GUIDE_DEFAULTS.opacity; }
+    const clamped = Math.min(READING_GUIDE_OPACITY_MAX, Math.max(READING_GUIDE_OPACITY_MIN, numeric));
+    const steps = Math.round(clamped / READING_GUIDE_OPACITY_STEP);
+    return Math.min(READING_GUIDE_OPACITY_MAX, Math.max(READING_GUIDE_OPACITY_MIN, steps * READING_GUIDE_OPACITY_STEP));
+  }
+
+  function normalizeReadingGuideColor(value){
+    if(typeof value !== 'string'){ return READING_GUIDE_DEFAULTS.color; }
+    const trimmed = value.trim();
+    if(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(trimmed)){ 
+      if(trimmed.length === 4){
+        const expanded = trimmed.slice(1).split('').map(char => char + char).join('');
+        return `#${expanded.toLowerCase()}`;
+      }
+      return trimmed.toLowerCase();
+    }
+    return READING_GUIDE_DEFAULTS.color;
+  }
+
+  function loadReadingGuideSettings(){
+    const defaults = Object.assign({}, READING_GUIDE_DEFAULTS);
+    try {
+      const raw = localStorage.getItem(READING_GUIDE_SETTINGS_KEY);
+      if(!raw){ return Object.assign({}, defaults); }
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object'){ return Object.assign({}, defaults); }
+      const result = Object.assign({}, defaults);
+      if(Object.prototype.hasOwnProperty.call(parsed, 'color')){
+        result.color = normalizeReadingGuideColor(parsed.color);
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'opacity')){
+        result.opacity = clampReadingGuideOpacity(parsed.opacity);
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'height')){
+        result.height = clampReadingGuideHeight(parsed.height);
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'summaryEnabled')){
+        result.summaryEnabled = !!parsed.summaryEnabled;
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'summarySelector')){
+        result.summarySelector = typeof parsed.summarySelector === 'string' ? parsed.summarySelector : '';
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'summaryContainer')){
+        result.summaryContainer = typeof parsed.summaryContainer === 'string' ? parsed.summaryContainer : '';
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'summaryTitle')){
+        result.summaryTitle = typeof parsed.summaryTitle === 'string' ? parsed.summaryTitle : '';
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'syllableEnabled')){
+        result.syllableEnabled = !!parsed.syllableEnabled;
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'syllableSelector')){
+        result.syllableSelector = typeof parsed.syllableSelector === 'string' ? parsed.syllableSelector : defaults.syllableSelector;
+      }
+      if(Object.prototype.hasOwnProperty.call(parsed, 'focusEnabled')){
+        result.focusEnabled = !!parsed.focusEnabled;
+      }
+      return result;
+    } catch(err){
+      return Object.assign({}, defaults);
+    }
+  }
+
+  function persistReadingGuideSettings(){
+    const payload = {
+      color: normalizeReadingGuideColor(readingGuideSettings.color),
+      opacity: clampReadingGuideOpacity(readingGuideSettings.opacity),
+      height: clampReadingGuideHeight(readingGuideSettings.height),
+      summaryEnabled: !!readingGuideSettings.summaryEnabled,
+      summarySelector: typeof readingGuideSettings.summarySelector === 'string' ? readingGuideSettings.summarySelector : '',
+      summaryContainer: typeof readingGuideSettings.summaryContainer === 'string' ? readingGuideSettings.summaryContainer : '',
+      summaryTitle: typeof readingGuideSettings.summaryTitle === 'string' ? readingGuideSettings.summaryTitle : '',
+      syllableEnabled: !!readingGuideSettings.syllableEnabled,
+      syllableSelector: typeof readingGuideSettings.syllableSelector === 'string' ? readingGuideSettings.syllableSelector : READING_GUIDE_DEFAULTS.syllableSelector,
+      focusEnabled: !!readingGuideSettings.focusEnabled,
+    };
+    try { localStorage.setItem(READING_GUIDE_SETTINGS_KEY, JSON.stringify(payload)); } catch(err){ /* ignore */ }
+  }
+
+  function resetReadingGuideSettings(options = {}){
+    const { persist: shouldPersist = true } = options;
+    readingGuideSettings = Object.assign({}, READING_GUIDE_DEFAULTS);
+    if(shouldPersist){ persistReadingGuideSettings(); }
+    if(readingGuideActive){
+      applyReadingGuideStyles();
+      applyReadingGuideSummary();
+      applyReadingGuideSyllables();
+      applyReadingGuideFocusMode(readingGuideSettings.focusEnabled);
+      refreshReadingGuideOverlay();
+    }
+    syncReadingGuideInstances();
+  }
+
+  function updateReadingGuideSelectors(rawSettings){
+    if(!rawSettings || typeof rawSettings !== 'object'){ return; }
+    const selectors = rawSettings.selectors;
+    if(!selectors || typeof selectors !== 'object'){ return; }
+    const updated = Object.assign({}, readingGuideSelectorConfig);
+    Object.keys(READING_GUIDE_DEFAULT_SELECTORS).forEach(key => {
+      if(Object.prototype.hasOwnProperty.call(selectors, key)){
+        const value = selectors[key];
+        if(typeof value === 'string' && value.trim()){
+          updated[key] = value.trim();
+        }
+      }
+    });
+    readingGuideSelectorConfig = updated;
+  }
+
+  function updateReadingGuideTexts(rawSettings){
+    if(!rawSettings || typeof rawSettings !== 'object'){ return; }
+    const defaultTitle = typeof rawSettings.summary_title_default === 'string'
+      ? rawSettings.summary_title_default.trim()
+      : '';
+    if(defaultTitle){
+      readingGuideTexts.summaryTitleFallback = defaultTitle;
+    }
+    if(typeof rawSettings.syllable_selector_default === 'string' && rawSettings.syllable_selector_default.trim()){
+      if(!readingGuideSettings.syllableSelector || readingGuideSettings.syllableSelector === READING_GUIDE_DEFAULTS.syllableSelector){
+        readingGuideSettings.syllableSelector = rawSettings.syllable_selector_default.trim();
+      }
+    }
+  }
+
+  function getReadingGuideSelectorValue(key){
+    if(!readingGuideSelectorConfig){ return ''; }
+    const value = readingGuideSelectorConfig[key];
+    return typeof value === 'string' ? value.trim() : '';
+  }
+
+  function getReadingGuideAttributeSelector(key){
+    const attrName = getReadingGuideSelectorValue(key);
+    return attrName ? `[${attrName}]` : '';
+  }
+
+  function getReadingGuideHeadingSelector(){
+    const custom = typeof readingGuideSettings.summarySelector === 'string' ? readingGuideSettings.summarySelector.trim() : '';
+    if(custom){ return custom; }
+    const fallback = getReadingGuideSelectorValue('headings');
+    return fallback || READING_GUIDE_DEFAULT_SELECTORS.headings;
+  }
+
+  function getReadingGuideSyllableSelector(){
+    const custom = typeof readingGuideSettings.syllableSelector === 'string' ? readingGuideSettings.syllableSelector.trim() : '';
+    return custom || READING_GUIDE_DEFAULTS.syllableSelector;
+  }
+
+  function ensureReadingGuideOverlay(){
+    if(readingGuideOverlayEl && readingGuideOverlayEl.isConnected){ return readingGuideOverlayEl; }
+    const overlay = document.createElement('div');
+    overlay.className = 'a11y-reading-guide-overlay';
+    overlay.setAttribute('aria-hidden', 'true');
+    overlay.hidden = !readingGuideActive;
+    document.body.appendChild(overlay);
+    readingGuideOverlayEl = overlay;
+    applyReadingGuideStyles();
+    return overlay;
+  }
+
+  function applyReadingGuideStyles(){
+    const rootEl = document.documentElement;
+    if(!rootEl){ return; }
+    const color = normalizeReadingGuideColor(readingGuideSettings.color);
+    const opacity = clampReadingGuideOpacity(readingGuideSettings.opacity);
+    const height = clampReadingGuideHeight(readingGuideSettings.height);
+    rootEl.style.setProperty('--a11y-reading-guide-color', color);
+    rootEl.style.setProperty('--a11y-reading-guide-opacity', String(opacity));
+    rootEl.style.setProperty('--a11y-reading-guide-height', `${height}px`);
+    if(readingGuideOverlayEl){
+      readingGuideOverlayEl.style.backgroundColor = color;
+      readingGuideOverlayEl.style.opacity = String(opacity);
+      readingGuideOverlayEl.style.height = `${height}px`;
+    }
+  }
+
+  function setReadingGuideOverlayVisibility(visible){
+    const overlay = ensureReadingGuideOverlay();
+    overlay.hidden = !visible;
+    overlay.setAttribute('aria-hidden', visible ? 'false' : 'true');
+  }
+
+  function updateReadingGuideOverlayPosition(y){
+    if(typeof y !== 'number'){ return; }
+    const overlay = ensureReadingGuideOverlay();
+    const height = clampReadingGuideHeight(readingGuideSettings.height);
+    const offset = height / 2;
+    const max = Math.max(0, window.innerHeight - height);
+    const next = Math.min(Math.max(y - offset, 0), max);
+    overlay.style.transform = `translateY(${next}px)`;
+    readingGuidePointerY = y;
+  }
+
+  function updateReadingGuideOverlayForElement(element){
+    if(!element || typeof element.getBoundingClientRect !== 'function'){ return; }
+    const rect = element.getBoundingClientRect();
+    if(rect.height === 0 && rect.top === 0){ return; }
+    const centerY = rect.top + (rect.height / 2);
+    updateReadingGuideOverlayPosition(centerY);
+  }
+
+  function refreshReadingGuideOverlay(){
+    if(!readingGuideActive){ return; }
+    const active = document.activeElement;
+    if(active && active !== document.body){
+      updateReadingGuideOverlayForElement(active);
+      setReadingGuideOverlayVisibility(true);
+      return;
+    }
+    if(typeof readingGuidePointerY === 'number'){
+      updateReadingGuideOverlayPosition(readingGuidePointerY);
+      setReadingGuideOverlayVisibility(true);
+    }
+  }
+
+  function handleReadingGuidePointer(event){
+    if(!readingGuideActive){ return; }
+    if(event && event.target && event.target.closest && event.target.closest('#a11y-widget-root')){
+      return;
+    }
+    if(typeof event.clientY === 'number'){
+      updateReadingGuideOverlayPosition(event.clientY);
+      setReadingGuideOverlayVisibility(true);
+    }
+  }
+
+  function handleReadingGuideFocus(event){
+    if(!readingGuideActive){ return; }
+    const target = event && event.target ? event.target : null;
+    if(!(target instanceof Element)){ return; }
+    if(target.closest('#a11y-widget-root')){ return; }
+    updateReadingGuideOverlayForElement(target);
+    setReadingGuideOverlayVisibility(true);
+  }
+
+  function handleReadingGuideScroll(){
+    refreshReadingGuideOverlay();
+  }
+
+  function removeReadingGuideListeners(){
+    while(readingGuideCleanup.length){
+      const disposer = readingGuideCleanup.pop();
+      try { disposer(); } catch(err){ /* ignore */ }
+    }
+    readingGuidePointerY = null;
+  }
+
+  function setupReadingGuideListeners(){
+    removeReadingGuideListeners();
+    const pointerHandler = event => handleReadingGuidePointer(event);
+    if(supportsPointer){
+      const pointerOptions = { passive: true };
+      document.addEventListener('pointermove', pointerHandler, pointerOptions);
+      readingGuideCleanup.push(() => document.removeEventListener('pointermove', pointerHandler, pointerOptions));
+    } else {
+      document.addEventListener('mousemove', pointerHandler);
+      readingGuideCleanup.push(() => document.removeEventListener('mousemove', pointerHandler));
+    }
+    const focusHandler = event => handleReadingGuideFocus(event);
+    document.addEventListener('focusin', focusHandler, true);
+    readingGuideCleanup.push(() => document.removeEventListener('focusin', focusHandler, true));
+    const scrollHandler = () => handleReadingGuideScroll();
+    window.addEventListener('scroll', scrollHandler, true);
+    readingGuideCleanup.push(() => window.removeEventListener('scroll', scrollHandler, true));
+    const resizeHandler = () => refreshReadingGuideOverlay();
+    window.addEventListener('resize', resizeHandler);
+    readingGuideCleanup.push(() => window.removeEventListener('resize', resizeHandler));
+    const blurHandler = () => { setReadingGuideOverlayVisibility(false); };
+    window.addEventListener('blur', blurHandler);
+    readingGuideCleanup.push(() => window.removeEventListener('blur', blurHandler));
+  }
+
+  function resolveReadingGuideSummaryContainer(){
+    const customSelector = typeof readingGuideSettings.summaryContainer === 'string'
+      ? readingGuideSettings.summaryContainer.trim()
+      : '';
+    if(customSelector){
+      try {
+        const node = document.querySelector(customSelector);
+        if(node){ return node; }
+      } catch(err){ /* ignore invalid selector */ }
+    }
+    const attrSelector = getReadingGuideAttributeSelector('tocAttribute');
+    if(attrSelector){
+      const node = document.querySelector(attrSelector);
+      if(node){ return node; }
+    }
+    if(readingGuideSummaryEl && readingGuideSummaryEl.isConnected){
+      return readingGuideSummaryEl;
+    }
+    const nav = document.createElement('nav');
+    nav.className = 'a11y-reading-guide-summary';
+    nav.setAttribute('aria-live', 'polite');
+    nav.dataset.readingGuideInjected = 'true';
+    document.body.appendChild(nav);
+    return nav;
+  }
+
+  function slugifyReadingGuideId(text){
+    if(typeof text !== 'string'){ return `rg-${Date.now()}`; }
+    const normalized = typeof text.normalize === 'function' ? text.normalize('NFD') : text;
+    const cleaned = normalized.replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    return cleaned || `rg-${Date.now()}`;
+  }
+
+  function ensureReadingGuideHeadingId(heading, index){
+    if(!heading){ return ''; }
+    if(heading.id){ return heading.id; }
+    const base = slugifyReadingGuideId(heading.textContent || `section-${index + 1}`);
+    let candidate = base;
+    let counter = 1;
+    while(document.getElementById(candidate)){
+      candidate = `${base}-${counter++}`;
+    }
+    heading.id = candidate;
+    return candidate;
+  }
+
+  function buildReadingGuideSummary(container, headings){
+    if(!container){ return; }
+    container.classList.add('a11y-reading-guide-summary');
+    container.innerHTML = '';
+    const titleText = (typeof readingGuideSettings.summaryTitle === 'string' && readingGuideSettings.summaryTitle.trim())
+      ? readingGuideSettings.summaryTitle.trim()
+      : readingGuideTexts.summaryTitleFallback;
+    if(titleText){
+      const title = document.createElement('h2');
+      title.className = 'a11y-reading-guide-summary__title';
+      title.textContent = titleText;
+      const titleAttr = getReadingGuideSelectorValue('tocTitleAttribute');
+      if(titleAttr){ title.setAttribute(titleAttr, ''); }
+      container.appendChild(title);
+      container.setAttribute('aria-label', titleText);
+    }
+    container.setAttribute('role', 'navigation');
+    const list = document.createElement('ol');
+    list.className = 'a11y-reading-guide-summary__list';
+    headings.forEach((heading, index) => {
+      const id = ensureReadingGuideHeadingId(heading, index);
+      const text = heading.textContent || heading.getAttribute('aria-label') || id;
+      const item = document.createElement('li');
+      item.className = 'a11y-reading-guide-summary__item';
+      const link = document.createElement('a');
+      link.className = 'a11y-reading-guide-summary__link';
+      link.href = `#${id}`;
+      link.textContent = text.trim();
+      item.appendChild(link);
+      list.appendChild(item);
+    });
+    container.appendChild(list);
+    container.dataset.readingGuideSummary = 'on';
+    readingGuideSummaryEl = container;
+  }
+
+  function clearReadingGuideSummary(){
+    if(!readingGuideSummaryEl){ return; }
+    if(readingGuideSummaryEl.dataset && readingGuideSummaryEl.dataset.readingGuideInjected === 'true'){
+      readingGuideSummaryEl.remove();
+    } else {
+      readingGuideSummaryEl.innerHTML = '';
+      if(readingGuideSummaryEl.dataset){
+        delete readingGuideSummaryEl.dataset.readingGuideSummary;
+      }
+      readingGuideSummaryEl.classList.remove('a11y-reading-guide-summary');
+    }
+    readingGuideSummaryEl = null;
+  }
+
+  function getReadingGuideContentScopes(){
+    const scopes = [];
+    const attrSelector = getReadingGuideAttributeSelector('contentAttribute');
+    if(attrSelector){
+      document.querySelectorAll(attrSelector).forEach(node => { if(node && !scopes.includes(node)){ scopes.push(node); } });
+    }
+    if(!scopes.length){
+      if(document.querySelector('main')){ scopes.push(document.querySelector('main')); }
+    }
+    if(!scopes.length && document.body){ scopes.push(document.body); }
+    return scopes.filter(Boolean);
+  }
+
+  function applyReadingGuideSummary(){
+    clearReadingGuideSummary();
+    if(!readingGuideActive || !readingGuideSettings.summaryEnabled){ return; }
+    const selector = getReadingGuideHeadingSelector();
+    if(!selector){ return; }
+    const headings = [];
+    const scopes = getReadingGuideContentScopes();
+    scopes.forEach(scope => {
+      if(!scope){ return; }
+      let found = [];
+      try {
+        found = Array.from(scope.querySelectorAll(selector));
+      } catch(err){
+        try {
+          found = Array.from(scope.querySelectorAll(READING_GUIDE_DEFAULT_SELECTORS.headings));
+        } catch(err2){
+          found = [];
+        }
+      }
+      found.forEach(node => {
+        if(!(node instanceof Element)){ return; }
+        if(node.closest('#a11y-widget-root')){ return; }
+        if(!headings.includes(node)){ headings.push(node); }
+      });
+    });
+    if(!headings.length){ return; }
+    const container = resolveReadingGuideSummaryContainer();
+    if(!container){ return; }
+    buildReadingGuideSummary(container, headings);
+  }
+
+  function syllabifyReadingGuideWord(word){
+    if(typeof word !== 'string' || word.length < 6){ return word; }
+    const pattern = /([aeiouyàâäéèêëîïôöùûüœ])([bcdfghjklmnpqrstvwxz]{1,2})(?=[aeiouyàâäéèêëîïôöùûüœ])/gi;
+    let result = word.replace(pattern, '$1·$2');
+    if(result === word){
+      const mid = Math.floor(word.length / 2);
+      result = `${word.slice(0, mid)}·${word.slice(mid)}`;
+    }
+    return result;
+  }
+
+  function insertReadingGuideMiddots(text){
+    if(typeof text !== 'string' || !text.trim()){ return text; }
+    return text.replace(/([A-Za-zÀ-ÖØ-öø-ÿ]{4,})/g, match => syllabifyReadingGuideWord(match));
+  }
+
+  function applyReadingGuideSyllablesToElement(element){
+    if(!element || !(element instanceof Element)){ return; }
+    const skipContainers = ['#a11y-widget-root', '#a11y-overlay'];
+    if(element.closest && skipContainers.some(sel => element.closest(sel))){ return; }
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT, {
+      acceptNode(node){
+        if(!node || !node.textContent || !node.textContent.trim()){ return NodeFilter.FILTER_REJECT; }
+        const parent = node.parentElement;
+        if(parent && parent.closest('#a11y-widget-root')){ return NodeFilter.FILTER_REJECT; }
+        if(parent && ['script','style','code','pre','noscript','textarea'].includes(parent.nodeName.toLowerCase())){
+          return NodeFilter.FILTER_REJECT;
+        }
+        return NodeFilter.FILTER_ACCEPT;
+      }
+    });
+    const nodes = [];
+    let current = walker.nextNode();
+    while(current){
+      nodes.push(current);
+      current = walker.nextNode();
+    }
+    nodes.forEach(node => {
+      if(readingGuideTextNodes.has(node)){ return; }
+      const original = node.textContent;
+      const transformed = insertReadingGuideMiddots(original);
+      if(transformed !== original){
+        readingGuideTextNodes.set(node, original);
+        node.textContent = transformed;
+      }
+    });
+  }
+
+  function clearReadingGuideSyllables(){
+    readingGuideTextNodes.forEach((original, node) => {
+      if(node && node.textContent !== original){
+        node.textContent = original;
+      }
+    });
+    readingGuideTextNodes.clear();
+  }
+
+  function applyReadingGuideSyllables(){
+    clearReadingGuideSyllables();
+    if(!readingGuideActive || !readingGuideSettings.syllableEnabled){ return; }
+    const selector = getReadingGuideSyllableSelector();
+    const elements = new Set();
+    if(selector){
+      try {
+        document.querySelectorAll(selector).forEach(el => elements.add(el));
+      } catch(err){ /* ignore invalid selector */ }
+    }
+    const attrSelector = getReadingGuideAttributeSelector('syllableAttribute');
+    if(attrSelector){
+      document.querySelectorAll(attrSelector).forEach(el => elements.add(el));
+    }
+    if(!elements.size){
+      document.querySelectorAll(READING_GUIDE_DEFAULTS.syllableSelector).forEach(el => elements.add(el));
+    }
+    elements.forEach(el => applyReadingGuideSyllablesToElement(el));
+  }
+
+  function applyReadingGuideFocusMode(enabled){
+    const rootEl = document.documentElement;
+    if(!rootEl){ return; }
+    if(enabled){
+      rootEl.classList.add('a11y-reading-guide-focus');
+      rootEl.dataset.a11yReadingGuideFocus = 'on';
+      readingGuideFocusClassApplied = true;
+    } else {
+      rootEl.classList.remove('a11y-reading-guide-focus');
+      delete rootEl.dataset.a11yReadingGuideFocus;
+      readingGuideFocusClassApplied = false;
+    }
+  }
+
+  function setReadingGuideSetting(key, value, options = {}){
+    if(!Object.prototype.hasOwnProperty.call(readingGuideSettings, key)){ return; }
+    const { persist = true, syncUI = true, apply = true } = options;
+    let next = value;
+    switch(key){
+      case 'color':
+        next = normalizeReadingGuideColor(value);
+        break;
+      case 'opacity':
+        next = clampReadingGuideOpacity(value);
+        break;
+      case 'height':
+        next = clampReadingGuideHeight(value);
+        break;
+      case 'summaryEnabled':
+      case 'syllableEnabled':
+      case 'focusEnabled':
+        next = !!value;
+        break;
+      case 'summarySelector':
+      case 'summaryContainer':
+      case 'summaryTitle':
+      case 'syllableSelector':
+        next = typeof value === 'string' ? value : '';
+        break;
+      default:
+        break;
+    }
+    if(readingGuideSettings[key] === next){
+      if(syncUI){ syncReadingGuideInstances(); }
+      return;
+    }
+    readingGuideSettings[key] = next;
+    if(persist){ persistReadingGuideSettings(); }
+    if(apply && readingGuideActive){
+      if(key === 'color' || key === 'opacity' || key === 'height'){
+        applyReadingGuideStyles();
+        refreshReadingGuideOverlay();
+      }
+      if(key === 'summaryEnabled' || key === 'summarySelector' || key === 'summaryContainer' || key === 'summaryTitle'){
+        applyReadingGuideSummary();
+      }
+      if(key === 'syllableEnabled' || key === 'syllableSelector'){
+        applyReadingGuideSyllables();
+      }
+      if(key === 'focusEnabled'){
+        applyReadingGuideFocusMode(readingGuideSettings.focusEnabled);
+      }
+    }
+    if(syncUI){ syncReadingGuideInstances(); }
+  }
+
+  function pruneReadingGuideInstances(){
+    readingGuideInstances.forEach(instance => {
+      if(!instance){ readingGuideInstances.delete(instance); return; }
+      if(instance.wasConnected && (!instance.article || !instance.article.isConnected)){
+        readingGuideInstances.delete(instance);
+      }
+    });
+  }
+
+  function updateReadingGuideInstanceUI(instance){
+    if(!instance){ return; }
+    const {
+      article,
+      controls,
+      colorInput,
+      opacitySlider,
+      opacityValue,
+      heightSlider,
+      heightValue,
+      summaryToggle,
+      summarySelectorInput,
+      summaryContainerInput,
+      summaryTitleInput,
+      syllableToggle,
+      syllableSelectorInput,
+      focusToggle,
+      settings = {},
+    } = instance;
+    const active = readingGuideActive;
+    const color = normalizeReadingGuideColor(readingGuideSettings.color);
+    const opacity = clampReadingGuideOpacity(readingGuideSettings.opacity);
+    const height = clampReadingGuideHeight(readingGuideSettings.height);
+    if(article){
+      if(article.isConnected){ instance.wasConnected = true; }
+      article.classList.toggle('is-disabled', !active);
+    }
+    if(controls){
+      controls.classList.toggle('is-disabled', !active);
+      if(!active){ controls.setAttribute('aria-disabled', 'true'); }
+      else { controls.removeAttribute('aria-disabled'); }
+    }
+    if(colorInput){
+      colorInput.disabled = !active;
+      setInputValue(colorInput, color);
+      if(settings.color_hint){ colorInput.setAttribute('title', settings.color_hint); }
+    }
+    if(opacitySlider){
+      opacitySlider.disabled = !active;
+      setInputValue(opacitySlider, String(opacity));
+    }
+    if(opacityValue){
+      opacityValue.textContent = Math.round(opacity * 100) + '%';
+    }
+    if(heightSlider){
+      heightSlider.disabled = !active;
+      setInputValue(heightSlider, String(height));
+    }
+    if(heightValue){
+      heightValue.textContent = `${height}px`;
+    }
+    if(summaryToggle){
+      summaryToggle.disabled = !active;
+      setCheckboxState(summaryToggle, !!readingGuideSettings.summaryEnabled);
+    }
+    if(summarySelectorInput){
+      summarySelectorInput.disabled = !active || !readingGuideSettings.summaryEnabled;
+      setInputValue(summarySelectorInput, readingGuideSettings.summarySelector || '');
+      if(settings.summary_selector_placeholder){ summarySelectorInput.setAttribute('placeholder', settings.summary_selector_placeholder); }
+    }
+    if(summaryContainerInput){
+      summaryContainerInput.disabled = !active || !readingGuideSettings.summaryEnabled;
+      setInputValue(summaryContainerInput, readingGuideSettings.summaryContainer || '');
+      if(settings.summary_container_placeholder){ summaryContainerInput.setAttribute('placeholder', settings.summary_container_placeholder); }
+    }
+    if(summaryTitleInput){
+      summaryTitleInput.disabled = !active || !readingGuideSettings.summaryEnabled;
+      setInputValue(summaryTitleInput, readingGuideSettings.summaryTitle || '');
+      if(settings.summary_title_placeholder){ summaryTitleInput.setAttribute('placeholder', settings.summary_title_placeholder); }
+    }
+    if(syllableToggle){
+      syllableToggle.disabled = !active;
+      setCheckboxState(syllableToggle, !!readingGuideSettings.syllableEnabled);
+    }
+    if(syllableSelectorInput){
+      syllableSelectorInput.disabled = !active || !readingGuideSettings.syllableEnabled;
+      setInputValue(syllableSelectorInput, readingGuideSettings.syllableSelector || '');
+      if(settings.syllable_selector_placeholder){ syllableSelectorInput.setAttribute('placeholder', settings.syllable_selector_placeholder); }
+    }
+    if(focusToggle){
+      focusToggle.disabled = !active;
+      setCheckboxState(focusToggle, !!readingGuideSettings.focusEnabled);
+    }
+  }
+
+  function syncReadingGuideInstances(){
+    pruneReadingGuideInstances();
+    readingGuideInstances.forEach(instance => updateReadingGuideInstanceUI(instance));
+  }
+
+  function setReadingGuideActive(on){
+    const desired = !!on;
+    if(readingGuideActive === desired){
+      if(desired){ refreshReadingGuideOverlay(); }
+      syncReadingGuideInstances();
+      return;
+    }
+    readingGuideActive = desired;
+    if(desired){
+      applyReadingGuideStyles();
+      ensureReadingGuideOverlay();
+      setReadingGuideOverlayVisibility(true);
+      if(document.documentElement){
+        document.documentElement.classList.add('a11y-reading-guide-enabled');
+        document.documentElement.dataset.a11yReadingGuideActive = 'on';
+      }
+      setupReadingGuideListeners();
+      applyReadingGuideSummary();
+      applyReadingGuideSyllables();
+      applyReadingGuideFocusMode(readingGuideSettings.focusEnabled);
+      refreshReadingGuideOverlay();
+    } else {
+      removeReadingGuideListeners();
+      clearReadingGuideSummary();
+      clearReadingGuideSyllables();
+      applyReadingGuideFocusMode(false);
+      if(readingGuideOverlayEl){
+        readingGuideOverlayEl.remove();
+        readingGuideOverlayEl = null;
+      }
+      if(document.documentElement){
+        document.documentElement.classList.remove('a11y-reading-guide-enabled');
+        delete document.documentElement.dataset.a11yReadingGuideActive;
+      }
+    }
+    syncReadingGuideInstances();
+  }
+
+  function createReadingGuideCard(feature){
+    if(!feature || typeof feature.slug !== 'string' || !feature.slug){ return null; }
+
+    const article = document.createElement('article');
+    article.className = 'a11y-card a11y-card--reading-guide';
+    article.setAttribute('data-role', 'feature-card');
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.setAttribute('data-role', 'feature-meta');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = feature.label || '';
+    meta.appendChild(labelEl);
+
+    if(feature.hint){
+      const hintEl = document.createElement('span');
+      hintEl.className = 'hint';
+      hintEl.textContent = feature.hint;
+      meta.appendChild(hintEl);
+    }
+
+    const header = document.createElement('div');
+    header.className = 'a11y-reading-guide__header';
+    header.appendChild(meta);
+
+    const switchEl = buildSwitch(feature.slug, feature.aria_label || feature.label || '');
+    if(switchEl){
+      switchEl.classList.add('a11y-reading-guide__switch');
+      header.appendChild(switchEl);
+    }
+
+    article.appendChild(header);
+
+    const settings = feature.settings && typeof feature.settings === 'object' ? feature.settings : {};
+    updateReadingGuideSelectors(settings);
+    updateReadingGuideTexts(settings);
+
+    const controls = document.createElement('form');
+    controls.className = 'a11y-reading-guide__controls';
+    controls.setAttribute('data-role', 'reading-guide-controls');
+    controls.addEventListener('submit', event => { event.preventDefault(); });
+    article.appendChild(controls);
+
+    const ruleSection = document.createElement('fieldset');
+    ruleSection.className = 'a11y-reading-guide__section';
+    const ruleLegend = document.createElement('legend');
+    ruleLegend.className = 'a11y-reading-guide__legend';
+    ruleLegend.textContent = settings.rule_label || '';
+    ruleSection.appendChild(ruleLegend);
+    if(settings.rule_hint){
+      const ruleHint = document.createElement('p');
+      ruleHint.className = 'a11y-reading-guide__hint';
+      ruleHint.textContent = settings.rule_hint;
+      ruleSection.appendChild(ruleHint);
+    }
+
+    if(settings.personalization_label){
+      const personalization = document.createElement('p');
+      personalization.className = 'a11y-reading-guide__subheading';
+      personalization.textContent = settings.personalization_label;
+      ruleSection.appendChild(personalization);
+    }
+
+    const colorField = document.createElement('div');
+    colorField.className = 'a11y-reading-guide__field';
+    const colorLabel = document.createElement('label');
+    colorLabel.className = 'a11y-reading-guide__label';
+    colorLabel.textContent = settings.color_label || '';
+    const colorInput = document.createElement('input');
+    colorInput.type = 'color';
+    colorInput.className = 'a11y-reading-guide__input a11y-reading-guide__input--color';
+    colorLabel.appendChild(colorInput);
+    colorField.appendChild(colorLabel);
+    if(settings.color_hint){
+      const colorHint = document.createElement('p');
+      colorHint.className = 'a11y-reading-guide__hint';
+      colorHint.textContent = settings.color_hint;
+      colorField.appendChild(colorHint);
+    }
+    ruleSection.appendChild(colorField);
+
+    const opacityField = document.createElement('div');
+    opacityField.className = 'a11y-reading-guide__field';
+    const opacityLabel = document.createElement('label');
+    opacityLabel.className = 'a11y-reading-guide__label';
+    opacityLabel.textContent = settings.opacity_label || '';
+    const opacityValue = document.createElement('span');
+    opacityValue.className = 'a11y-reading-guide__value';
+    opacityLabel.appendChild(opacityValue);
+    opacityField.appendChild(opacityLabel);
+    const opacitySlider = document.createElement('input');
+    opacitySlider.type = 'range';
+    opacitySlider.className = 'a11y-reading-guide__slider';
+    opacitySlider.min = String(READING_GUIDE_OPACITY_MIN);
+    opacitySlider.max = String(READING_GUIDE_OPACITY_MAX);
+    opacitySlider.step = String(READING_GUIDE_OPACITY_STEP);
+    opacityField.appendChild(opacitySlider);
+    if(settings.opacity_hint){
+      const opacityHint = document.createElement('p');
+      opacityHint.className = 'a11y-reading-guide__hint';
+      opacityHint.textContent = settings.opacity_hint;
+      opacityField.appendChild(opacityHint);
+    }
+    ruleSection.appendChild(opacityField);
+
+    const heightField = document.createElement('div');
+    heightField.className = 'a11y-reading-guide__field';
+    const heightLabel = document.createElement('label');
+    heightLabel.className = 'a11y-reading-guide__label';
+    heightLabel.textContent = settings.height_label || '';
+    const heightValue = document.createElement('span');
+    heightValue.className = 'a11y-reading-guide__value';
+    heightLabel.appendChild(heightValue);
+    heightField.appendChild(heightLabel);
+    const heightSlider = document.createElement('input');
+    heightSlider.type = 'range';
+    heightSlider.className = 'a11y-reading-guide__slider';
+    heightSlider.min = String(READING_GUIDE_HEIGHT_MIN);
+    heightSlider.max = String(READING_GUIDE_HEIGHT_MAX);
+    heightSlider.step = String(READING_GUIDE_HEIGHT_STEP);
+    heightField.appendChild(heightSlider);
+    if(settings.height_hint){
+      const heightHint = document.createElement('p');
+      heightHint.className = 'a11y-reading-guide__hint';
+      heightHint.textContent = settings.height_hint;
+      heightField.appendChild(heightHint);
+    }
+    ruleSection.appendChild(heightField);
+
+    controls.appendChild(ruleSection);
+
+    const summarySection = document.createElement('fieldset');
+    summarySection.className = 'a11y-reading-guide__section';
+    const summaryLegend = document.createElement('legend');
+    summaryLegend.className = 'a11y-reading-guide__legend';
+    summaryLegend.textContent = settings.summary_label || '';
+    summarySection.appendChild(summaryLegend);
+    if(settings.summary_hint){
+      const summaryHint = document.createElement('p');
+      summaryHint.className = 'a11y-reading-guide__hint';
+      summaryHint.textContent = settings.summary_hint;
+      summarySection.appendChild(summaryHint);
+    }
+    const summaryToggleWrap = document.createElement('label');
+    summaryToggleWrap.className = 'a11y-reading-guide__checkbox';
+    const summaryToggle = document.createElement('input');
+    summaryToggle.type = 'checkbox';
+    summaryToggle.className = 'a11y-reading-guide__checkbox-input';
+    summaryToggleWrap.appendChild(summaryToggle);
+    const summaryToggleText = document.createElement('span');
+    summaryToggleText.textContent = settings.summary_toggle_label || settings.summary_label || '';
+    summaryToggleWrap.appendChild(summaryToggleText);
+    summarySection.appendChild(summaryToggleWrap);
+
+    const summarySelectorField = document.createElement('div');
+    summarySelectorField.className = 'a11y-reading-guide__field';
+    const summarySelectorLabel = document.createElement('label');
+    summarySelectorLabel.className = 'a11y-reading-guide__label';
+    summarySelectorLabel.textContent = settings.summary_selector_label || '';
+    const summarySelectorInput = document.createElement('input');
+    summarySelectorInput.type = 'text';
+    summarySelectorInput.className = 'a11y-reading-guide__input';
+    summarySelectorLabel.appendChild(summarySelectorInput);
+    summarySelectorField.appendChild(summarySelectorLabel);
+    if(settings.summary_selector_hint){
+      const summarySelectorHint = document.createElement('p');
+      summarySelectorHint.className = 'a11y-reading-guide__hint';
+      summarySelectorHint.textContent = settings.summary_selector_hint;
+      summarySelectorField.appendChild(summarySelectorHint);
+    }
+    summarySection.appendChild(summarySelectorField);
+
+    const summaryContainerField = document.createElement('div');
+    summaryContainerField.className = 'a11y-reading-guide__field';
+    const summaryContainerLabel = document.createElement('label');
+    summaryContainerLabel.className = 'a11y-reading-guide__label';
+    summaryContainerLabel.textContent = settings.summary_container_label || '';
+    const summaryContainerInput = document.createElement('input');
+    summaryContainerInput.type = 'text';
+    summaryContainerInput.className = 'a11y-reading-guide__input';
+    summaryContainerLabel.appendChild(summaryContainerInput);
+    summaryContainerField.appendChild(summaryContainerLabel);
+    if(settings.summary_container_hint){
+      const summaryContainerHint = document.createElement('p');
+      summaryContainerHint.className = 'a11y-reading-guide__hint';
+      summaryContainerHint.textContent = settings.summary_container_hint;
+      summaryContainerField.appendChild(summaryContainerHint);
+    }
+    summarySection.appendChild(summaryContainerField);
+
+    const summaryTitleField = document.createElement('div');
+    summaryTitleField.className = 'a11y-reading-guide__field';
+    const summaryTitleLabel = document.createElement('label');
+    summaryTitleLabel.className = 'a11y-reading-guide__label';
+    summaryTitleLabel.textContent = settings.summary_title_label || '';
+    const summaryTitleInput = document.createElement('input');
+    summaryTitleInput.type = 'text';
+    summaryTitleInput.className = 'a11y-reading-guide__input';
+    summaryTitleLabel.appendChild(summaryTitleInput);
+    summaryTitleField.appendChild(summaryTitleLabel);
+    summarySection.appendChild(summaryTitleField);
+
+    controls.appendChild(summarySection);
+
+    const syllableSection = document.createElement('fieldset');
+    syllableSection.className = 'a11y-reading-guide__section';
+    const syllableLegend = document.createElement('legend');
+    syllableLegend.className = 'a11y-reading-guide__legend';
+    syllableLegend.textContent = settings.syllable_label || '';
+    syllableSection.appendChild(syllableLegend);
+    if(settings.syllable_hint){
+      const syllableHint = document.createElement('p');
+      syllableHint.className = 'a11y-reading-guide__hint';
+      syllableHint.textContent = settings.syllable_hint;
+      syllableSection.appendChild(syllableHint);
+    }
+    const syllableToggleWrap = document.createElement('label');
+    syllableToggleWrap.className = 'a11y-reading-guide__checkbox';
+    const syllableToggle = document.createElement('input');
+    syllableToggle.type = 'checkbox';
+    syllableToggle.className = 'a11y-reading-guide__checkbox-input';
+    syllableToggleWrap.appendChild(syllableToggle);
+    const syllableToggleText = document.createElement('span');
+    syllableToggleText.textContent = settings.syllable_toggle_label || settings.syllable_label || '';
+    syllableToggleWrap.appendChild(syllableToggleText);
+    syllableSection.appendChild(syllableToggleWrap);
+
+    const syllableSelectorField = document.createElement('div');
+    syllableSelectorField.className = 'a11y-reading-guide__field';
+    const syllableSelectorLabel = document.createElement('label');
+    syllableSelectorLabel.className = 'a11y-reading-guide__label';
+    syllableSelectorLabel.textContent = settings.syllable_selector_label || '';
+    const syllableSelectorInput = document.createElement('input');
+    syllableSelectorInput.type = 'text';
+    syllableSelectorInput.className = 'a11y-reading-guide__input';
+    syllableSelectorLabel.appendChild(syllableSelectorInput);
+    syllableSelectorField.appendChild(syllableSelectorLabel);
+    if(settings.syllable_selector_hint){
+      const syllableSelectorHint = document.createElement('p');
+      syllableSelectorHint.className = 'a11y-reading-guide__hint';
+      syllableSelectorHint.textContent = settings.syllable_selector_hint;
+      syllableSelectorField.appendChild(syllableSelectorHint);
+    }
+    syllableSection.appendChild(syllableSelectorField);
+    controls.appendChild(syllableSection);
+
+    const focusSection = document.createElement('fieldset');
+    focusSection.className = 'a11y-reading-guide__section';
+    const focusLegend = document.createElement('legend');
+    focusLegend.className = 'a11y-reading-guide__legend';
+    focusLegend.textContent = settings.focus_label || '';
+    focusSection.appendChild(focusLegend);
+    if(settings.focus_hint){
+      const focusHint = document.createElement('p');
+      focusHint.className = 'a11y-reading-guide__hint';
+      focusHint.textContent = settings.focus_hint;
+      focusSection.appendChild(focusHint);
+    }
+    const focusToggleWrap = document.createElement('label');
+    focusToggleWrap.className = 'a11y-reading-guide__checkbox';
+    const focusToggle = document.createElement('input');
+    focusToggle.type = 'checkbox';
+    focusToggle.className = 'a11y-reading-guide__checkbox-input';
+    focusToggleWrap.appendChild(focusToggle);
+    const focusToggleText = document.createElement('span');
+    focusToggleText.textContent = settings.focus_toggle_label || settings.focus_label || '';
+    focusToggleWrap.appendChild(focusToggleText);
+    focusSection.appendChild(focusToggleWrap);
+    controls.appendChild(focusSection);
+
+    const instance = {
+      article,
+      controls,
+      colorInput,
+      opacitySlider,
+      opacityValue,
+      heightSlider,
+      heightValue,
+      summaryToggle,
+      summarySelectorInput,
+      summaryContainerInput,
+      summaryTitleInput,
+      syllableToggle,
+      syllableSelectorInput,
+      focusToggle,
+      settings,
+      wasConnected: false,
+    };
+
+    readingGuideInstances.add(instance);
+    syncReadingGuideInstances();
+
+    const markConnection = () => {
+      if(instance.article && instance.article.isConnected){ instance.wasConnected = true; }
+    };
+    if(typeof requestAnimationFrame === 'function'){ requestAnimationFrame(markConnection); }
+    else { setTimeout(markConnection, 0); }
+
+    colorInput.addEventListener('input', () => setReadingGuideSetting('color', colorInput.value, { persist: false, syncUI: false }));
+    colorInput.addEventListener('change', () => setReadingGuideSetting('color', colorInput.value));
+
+    opacitySlider.addEventListener('input', () => setReadingGuideSetting('opacity', opacitySlider.value, { persist: false, syncUI: false }));
+    opacitySlider.addEventListener('change', () => setReadingGuideSetting('opacity', opacitySlider.value));
+
+    heightSlider.addEventListener('input', () => setReadingGuideSetting('height', heightSlider.value, { persist: false, syncUI: false }));
+    heightSlider.addEventListener('change', () => setReadingGuideSetting('height', heightSlider.value));
+
+    summaryToggle.addEventListener('change', () => setReadingGuideSetting('summaryEnabled', summaryToggle.checked));
+
+    summarySelectorInput.addEventListener('input', () => setReadingGuideSetting('summarySelector', summarySelectorInput.value, { persist: false, apply: false }));
+    summarySelectorInput.addEventListener('change', () => setReadingGuideSetting('summarySelector', summarySelectorInput.value));
+
+    summaryContainerInput.addEventListener('input', () => setReadingGuideSetting('summaryContainer', summaryContainerInput.value, { persist: false, apply: false }));
+    summaryContainerInput.addEventListener('change', () => setReadingGuideSetting('summaryContainer', summaryContainerInput.value));
+
+    summaryTitleInput.addEventListener('input', () => setReadingGuideSetting('summaryTitle', summaryTitleInput.value, { persist: false, apply: false }));
+    summaryTitleInput.addEventListener('change', () => setReadingGuideSetting('summaryTitle', summaryTitleInput.value));
+
+    syllableToggle.addEventListener('change', () => setReadingGuideSetting('syllableEnabled', syllableToggle.checked));
+
+    syllableSelectorInput.addEventListener('input', () => setReadingGuideSetting('syllableSelector', syllableSelectorInput.value, { persist: false, apply: false }));
+    syllableSelectorInput.addEventListener('change', () => setReadingGuideSetting('syllableSelector', syllableSelectorInput.value));
+
+    focusToggle.addEventListener('change', () => setReadingGuideSetting('focusEnabled', focusToggle.checked));
+
+    return article;
+  }
+
   function pruneDyslexiaInstances(){
     dyslexiaInstances.forEach(instance => {
       if(!instance){
@@ -3059,6 +4129,9 @@ ${interactiveSelectors} {
     if(template === 'cursor-settings'){
       return createCursorCard(feature);
     }
+    if(template === 'reading-guide'){
+      return createReadingGuideCard(feature);
+    }
     return createFeaturePlaceholder(feature);
   }
 
@@ -3494,6 +4567,10 @@ ${interactiveSelectors} {
     setBrightnessActive(on);
   });
 
+  A11yAPI.registerFeature(READING_GUIDE_SLUG, on => {
+    setReadingGuideActive(on);
+  });
+
   A11yAPI.registerFeature(DYSLEXIA_SLUG, on => {
     setDyslexiaActive(on);
   });
@@ -3580,6 +4657,7 @@ ${interactiveSelectors} {
       try { localStorage.removeItem(BUTTONS_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(CURSOR_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(BRIGHTNESS_SETTINGS_KEY); } catch(err){}
+      try { localStorage.removeItem(READING_GUIDE_SETTINGS_KEY); } catch(err){}
       document.documentElement.style.removeProperty('--a11y-launcher-x');
       document.documentElement.style.removeProperty('--a11y-launcher-y');
       launcherLastPos = null;
@@ -3588,6 +4666,7 @@ ${interactiveSelectors} {
       resetBrightnessSettings({ persist: false });
       resetButtonSettings({ persist: false });
       resetCursorSettings();
+      resetReadingGuideSettings({ persist: false });
       setCursorActive(false);
     });
   }
