@@ -5633,19 +5633,24 @@ ${interactiveSelectors} {
     const padding = typeof opts.padding === 'number' ? opts.padding : 16;
     const behavior = opts.behavior || 'smooth';
     const scrollerRect = scroller.getBoundingClientRect();
-    const itemRect = tabItem.getBoundingClientRect();
+    const tabRect = tabItem.getBoundingClientRect();
+    const visiblePanel = tabItem.querySelector('[data-role="section-panel"]:not([hidden])');
+    const itemRect = visiblePanel ? visiblePanel.getBoundingClientRect() : tabRect;
+    const buttonOffset = visiblePanel ? Math.max(0, itemRect.top - tabRect.top) : 0;
     const currentTop = scroller.scrollTop;
     const currentBottom = currentTop + scrollerRect.height;
     const itemTop = itemRect.top - scrollerRect.top + currentTop;
     const itemBottom = itemTop + itemRect.height;
+    const itemTopWithOffset = itemTop - buttonOffset;
+    const itemHeightWithOffset = itemRect.height + buttonOffset;
 
     let targetTop = null;
 
-    if(itemTop < currentTop + padding){
-      targetTop = itemTop - padding;
+    if(itemTopWithOffset < currentTop + padding){
+      targetTop = itemTopWithOffset - padding;
     } else if(itemBottom > currentBottom - padding){
-      if(itemRect.height >= scrollerRect.height){
-        targetTop = itemTop - padding;
+      if(itemHeightWithOffset >= scrollerRect.height){
+        targetTop = itemTopWithOffset - padding;
       } else {
         targetTop = itemBottom - scrollerRect.height + padding;
       }
