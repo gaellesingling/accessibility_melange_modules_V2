@@ -150,8 +150,15 @@
 .a11y-close { border: none; background: none; padding: 8px; cursor: pointer; border-radius: 10px; }
 .a11y-close:focus-visible { outline: 3px solid #000; outline-offset: 2px; }
 
-.a11y-content { overflow: auto; padding: 12px 12px 0; }
-.a11y-search { display: grid; gap: 6px; margin: 0 0 18px; }
+.a11y-content {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 16px;
+  overflow-y: auto;
+  min-height: 0;
+}
+.a11y-search { display: grid; gap: 8px; margin: 0; }
 .a11y-search__label { font-size: 0.9rem; font-weight: 600; color: var(--a11y-text); }
 .a11y-search__input {
   width: 100%;
@@ -170,9 +177,16 @@
   box-shadow: 0 0 0 3px rgba(214, 30, 91, 0.18);
 }
 
-.a11y-search-results { display: none; gap: 16px; margin: 0 0 18px; }
+.a11y-search-results {
+  display: none;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .a11y-search-results__list { display: grid; gap: 16px; }
-.a11y-panel.is-searching .a11y-search-results { display: grid; }
+.a11y-panel.is-searching .a11y-search-results { display: flex; }
 .a11y-panel.is-searching .a11y-tabs { display: none; }
 .a11y-panel.is-searching .a11y-section-panel { display: none !important; }
 .a11y-section { padding: 10px; }
@@ -182,7 +196,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  margin: 0 0 20px;
+  margin: 0;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 0;
   list-style: none;
 }
@@ -191,6 +207,8 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  min-width: 0;
 }
 
 .a11y-tab {
@@ -253,8 +271,12 @@
   border-radius: 14px;
   background: var(--a11y-surface);
   padding: 18px 18px 20px;
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
+  flex: 0 0 auto;
+  min-height: 0;
+  min-width: 0;
 }
 
 .a11y-section-panel[hidden] {
@@ -265,6 +287,15 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: 18px;
+}
+
+.a11y-section-panel .a11y-grid {
+  min-height: 0;
+}
+
+.a11y-section-panel .a11y-empty {
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 .a11y-card.is-search-match {
@@ -289,7 +320,7 @@
   }
 
   .a11y-header { flex-wrap: wrap; }
-  .a11y-content { padding: 10px 10px 0; }
+  .a11y-content { padding: 12px; }
   .a11y-section { padding: 8px; }
 }
 
