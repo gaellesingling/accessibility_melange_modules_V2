@@ -688,6 +688,79 @@
     });
   }
 
+  function isManagedColorblindSlug(slug){
+    return COLORBLIND_CONTROLLED_SET.has(slug);
+  }
+
+  function getActiveColorblindDisabledSlugs(){
+    const disabled = new Set();
+    const hasAchromatopsia = colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasAchromatopsia){
+      COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+        if(!Array.isArray(group)){ return; }
+        group.forEach(slug => {
+          if(typeof slug === 'string' && slug){
+            disabled.add(slug);
+          }
+        });
+      });
+      return disabled;
+    }
+
+    const hasOtherActive = Array.from(colorblindActiveFilters).some(slug => slug !== COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasOtherActive){
+      disabled.add(COLORBLIND_ACHROMATOPSIA_SLUG);
+    }
+
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      const groupActive = group.some(slug => colorblindActiveFilters.has(slug));
+      if(!groupActive){ return; }
+      group.forEach(slug => {
+        if(!colorblindActiveFilters.has(slug) && typeof slug === 'string' && slug){
+          disabled.add(slug);
+        }
+      });
+    });
+
+    return disabled;
+  }
+
+  function updateColorblindToggleAvailability(){
+    if(isUpdatingColorblindAvailability){ return; }
+    isUpdatingColorblindAvailability = true;
+    const disabledSlugs = getActiveColorblindDisabledSlugs();
+    COLORBLIND_CONTROLLED_SLUGS.forEach(slug => {
+      const input = featureInputs.get(slug);
+      const shouldDisable = disabledSlugs.has(slug);
+      const isActive = colorblindActiveFilters.has(slug);
+      if(input){
+        const disableInput = shouldDisable && !isActive;
+        if(input.disabled !== disableInput){
+          input.disabled = disableInput;
+        }
+        const switchEl = input.closest('.a11y-switch');
+        if(switchEl){
+          switchEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ switchEl.setAttribute('aria-disabled', 'true'); }
+          else { switchEl.removeAttribute('aria-disabled'); }
+        }
+        const rowEl = input.closest('.a11y-subfeature');
+        if(rowEl){
+          rowEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ rowEl.setAttribute('aria-disabled', 'true'); }
+          else { rowEl.removeAttribute('aria-disabled'); }
+        }
+      }
+    });
+    isUpdatingColorblindAvailability = false;
+    disabledSlugs.forEach(slug => {
+      if(colorblindActiveFilters.has(slug)){
+        toggleFeature(slug, false);
+      }
+    });
+  }
+
   function getColorblindShortName(slug){
     if(typeof slug !== 'string'){ return ''; }
     return slug.replace(/^vision-daltonisme-/, '');
