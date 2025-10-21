@@ -30,6 +30,7 @@
   const btn = document.getElementById('a11y-launcher');
   const overlay = document.getElementById('a11y-overlay');
   const panel = root ? root.querySelector('.a11y-panel') : null;
+  const contentScroller = panel ? panel.querySelector('.a11y-content') : null;
   const closeBtn = document.getElementById('a11y-close');
   const closeBtn2 = document.getElementById('a11y-close2');
   const resetBtn = document.getElementById('a11y-reset');
@@ -5626,6 +5627,43 @@ ${interactiveSelectors} {
     if(triggerTab){ focusTab(triggerTab); }
   }
 
+  function scrollTabItemIntoView(tabItem, opts={}){
+    if(!tabItem || !contentScroller){ return; }
+    const scroller = contentScroller;
+    const padding = typeof opts.padding === 'number' ? opts.padding : 16;
+    const behavior = opts.behavior || 'smooth';
+    const scrollerRect = scroller.getBoundingClientRect();
+    const itemRect = tabItem.getBoundingClientRect();
+    const currentTop = scroller.scrollTop;
+    const currentBottom = currentTop + scrollerRect.height;
+    const itemTop = itemRect.top - scrollerRect.top + currentTop;
+    const itemBottom = itemTop + itemRect.height;
+
+    let targetTop = null;
+
+    if(itemTop < currentTop + padding){
+      targetTop = itemTop - padding;
+    } else if(itemBottom > currentBottom - padding){
+      if(itemRect.height >= scrollerRect.height){
+        targetTop = itemTop - padding;
+      } else {
+        targetTop = itemBottom - scrollerRect.height + padding;
+      }
+    }
+
+    if(targetTop === null){
+      return;
+    }
+
+    targetTop = Math.max(0, targetTop);
+
+    if(typeof scroller.scrollTo === 'function'){
+      scroller.scrollTo({ top: targetTop, behavior });
+    } else {
+      scroller.scrollTop = targetTop;
+    }
+  }
+
   function setActiveTab(tab, opts={}){
     if(!tab){
       collapseSection(null);
@@ -5663,6 +5701,10 @@ ${interactiveSelectors} {
       if(changed || !grid || !grid.children.length){
         renderSection(sectionId);
       }
+    }
+    if(opts.scroll !== false){
+      const tabItem = tab.closest('[data-role="tab-item"]');
+      scrollTabItemIntoView(tabItem, { behavior: opts.behavior || 'smooth' });
     }
   }
 
@@ -5730,7 +5772,7 @@ ${interactiveSelectors} {
     });
     const initiallySelected = tabs.find(tab => tab.getAttribute('aria-selected') === 'true') || tabs[0];
     if(initiallySelected){
-      setActiveTab(initiallySelected);
+      setActiveTab(initiallySelected, { scroll: false });
     }
   }
 
