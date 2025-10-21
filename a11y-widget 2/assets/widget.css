@@ -274,10 +274,10 @@
   display: flex;
   flex-direction: column;
   gap: 16px;
-  grid-auto-rows: min-content;
-  align-content: flex-start;
+  flex: 1 1 auto;
   min-height: 0;
   min-width: 0;
+  overflow: hidden;
 }
 
 .a11y-section-panel[hidden] {
@@ -292,6 +292,13 @@
 
 .a11y-section-panel .a11y-grid {
   min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+}
+
+.a11y-section-panel .a11y-empty {
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 .a11y-card.is-search-match {
