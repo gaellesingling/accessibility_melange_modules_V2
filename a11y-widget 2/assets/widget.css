@@ -1043,6 +1043,80 @@
 .a11y-subfeature.is-disabled .label {
   color: var(--a11y-text-subtle);
 }
+.a11y-card--colorblind .a11y-subfeatures {
+  gap: 18px;
+}
+.a11y-colorblind-item {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--a11y-radius);
+  border: 1px solid var(--a11y-border);
+  background: var(--a11y-surface);
+}
+.a11y-colorblind-item__header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+}
+.a11y-colorblind-item__label {
+  display: grid;
+  gap: 6px;
+  flex: 1;
+}
+.a11y-colorblind-item__label .label {
+  font-size: 1rem;
+  font-weight: 600;
+}
+.a11y-colorblind-item__label .hint {
+  font-size: .85rem;
+  color: var(--a11y-text-subtle);
+}
+.a11y-colorblind-item__controls {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+.a11y-colorblind-field {
+  display: grid;
+  gap: 6px;
+}
+.a11y-colorblind-field-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  font-size: .9rem;
+}
+.a11y-colorblind-field-label {
+  font-weight: 600;
+}
+.a11y-colorblind-field-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--a11y-text-strong);
+}
+.a11y-colorblind-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--a11y-border);
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+.a11y-colorblind-field select:focus-visible {
+  outline: 3px solid #000;
+  outline-offset: 2px;
+}
+.a11y-colorblind-field input[type="range"] {
+  width: 100%;
+  accent-color: var(--a11y-primary);
+}
+.a11y-colorblind-item.is-disabled {
+  opacity: 0.6;
+}
 .a11y-empty { margin: 0 2px 12px; font-size: .9rem; color: #555; }
 
 /* Switch */
@@ -1350,5 +1424,19 @@ html.a11y-reading-guide-focus {
 html.a11y-reading-guide-focus *:not(#a11y-widget-root *):not([data-reading-guide-allow-animation]):not([data-reading-guide-allow-animation] *) {
   animation: none !important;
   transition: none !important;
+}
+
+.a11y-achro-dimmer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.45);
+  opacity: 0;
+  transition: opacity .25s ease;
+  z-index: calc(var(--a11y-z-overlay) - 1);
+}
+
+html.a11y-achromatopsia-text-boost {
+  font-size: calc(100% * var(--a11y-achrom-text-scale, 1));
 }
 
