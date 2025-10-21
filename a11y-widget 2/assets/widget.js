@@ -203,11 +203,490 @@
     'vision-daltonisme-protanomalie': { intensity: 0.7, hue: -3, saturate: 0.2, contrast: 0.1, sepia: 0.02 },
     'vision-daltonisme-tritanopie': { intensity: 0.85, hue: 25, saturate: 0.25, contrast: 0.15, sepia: 0.05 },
     'vision-daltonisme-tritanomalie': { intensity: 0.6, hue: 12, saturate: 0.15, contrast: 0.08, sepia: 0.03, multiplier: 1 },
-    'vision-daltonisme-achromatopsie': { grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
+    'vision-daltonisme-achromatopsie': { intensity: 0.5, grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
   };
+
+  const COLORBLIND_ACHROMATOPSIA_SLUG = 'vision-daltonisme-achromatopsie';
+
+  const COLORBLIND_EXCLUSIVE_GROUPS = [
+    [
+      'vision-daltonisme-deuteranopie',
+      'vision-daltonisme-deuteranomalie',
+    ],
+    [
+      'vision-daltonisme-protanopie',
+      'vision-daltonisme-protanomalie',
+    ],
+    [
+      'vision-daltonisme-tritanopie',
+      'vision-daltonisme-tritanomalie',
+    ],
+  ];
+
+  const COLORBLIND_CONTROLLED_SLUGS = (() => {
+    const set = new Set([COLORBLIND_ACHROMATOPSIA_SLUG]);
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      group.forEach(slug => {
+        if(typeof slug === 'string' && slug){
+          set.add(slug);
+        }
+      });
+    });
+    return set;
+  })();
+
+  const COLORBLIND_CONTROLLED_SET = new Set(COLORBLIND_CONTROLLED_SLUGS);
+  let isUpdatingColorblindAvailability = false;
 
   const colorblindActiveFilters = new Set();
   const colorblindRootClasses = new Set();
+  const COLORBLIND_TRITANOMALY_SLUG = 'vision-daltonisme-tritanomalie';
+  const COLORBLIND_SETTINGS_STORAGE_KEY = 'a11y-widget-colorblind-settings:v1';
+  const COLORBLIND_SENSITIVITY_OPTIONS = [
+    { value: 'mild', label: 'L\u00e9ger' },
+    { value: 'moderate', label: 'Mod\u00e9r\u00e9' },
+    { value: 'severe', label: 'S\u00e9v\u00e8re' },
+  ];
+  const COLORBLIND_PHOTOPHOBIA_OPTIONS = COLORBLIND_SENSITIVITY_OPTIONS;
+  const COLORBLIND_INTENSITY_RANGES = {
+    'vision-daltonisme-deuteranopie': { min: 0.3, max: 1, step: 0.1 },
+    'vision-daltonisme-deuteranomalie': { min: 0.2, max: 1, step: 0.1 },
+    'vision-daltonisme-protanopie': { min: 0.3, max: 1, step: 0.1 },
+    'vision-daltonisme-protanomalie': { min: 0.2, max: 1, step: 0.1 },
+    'vision-daltonisme-tritanopie': { min: 0.3, max: 1, step: 0.1 },
+    'vision-daltonisme-tritanomalie': { min: 0.2, max: 1, step: 0.1 },
+    'vision-daltonisme-achromatopsie': { min: 0, max: 1, step: 0.1 },
+  };
+  const COLORBLIND_ACHROM_CONTROL_RANGES = {
+    contrast: { min: 1, max: 1.8, step: 0.05 },
+    brightness: { min: 0.6, max: 1.2, step: 0.05 },
+    textScale: { min: 1, max: 2.5, step: 0.1 },
+  };
+  const COLORBLIND_SENSITIVITY_MULTIPLIERS = {
+    mild: 0.7,
+    moderate: 1,
+    severe: 1.4,
+  };
+  const COLORBLIND_PHOTOPHOBIA_CONFIG = {
+    mild: { brightnessFactor: 1, dimmingFactor: 0.8 },
+    moderate: { brightnessFactor: 0.92, dimmingFactor: 1 },
+    severe: { brightnessFactor: 0.85, dimmingFactor: 1.25 },
+  };
+  const COLORBLIND_DEFAULT_SETTINGS = (() => {
+    const defaults = {};
+    Object.keys(COLORBLIND_FILTER_PRESETS).forEach(slug => {
+      const preset = COLORBLIND_FILTER_PRESETS[slug] || {};
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        defaults[slug] = {
+          intensity: typeof preset.intensity === 'number' ? preset.intensity : 0.5,
+          photophobia: 'moderate',
+          contrast: 1.2,
+          brightness: 0.9,
+          textScale: 2,
+        };
+      } else {
+        defaults[slug] = {
+          intensity: typeof preset.intensity === 'number' ? preset.intensity : 0.8,
+        };
+        if(slug === COLORBLIND_TRITANOMALY_SLUG){
+          defaults[slug].sensitivity = 'moderate';
+        }
+      }
+    });
+    return defaults;
+  })();
+  let colorblindSettings = loadColorblindSettings();
+  const colorblindControlRefs = new Map();
+  let colorblindSettingsSaveTimer = null;
+  let colorblindAchroDimmer = null;
+
+  function cloneColorblindDefaults(){
+    const defaults = {};
+    Object.keys(COLORBLIND_DEFAULT_SETTINGS).forEach(slug => {
+      defaults[slug] = Object.assign({}, COLORBLIND_DEFAULT_SETTINGS[slug]);
+    });
+    return defaults;
+  }
+
+  function getColorblindIntensityRange(slug){
+    return COLORBLIND_INTENSITY_RANGES[slug] || { min: 0, max: 1, step: 0.1 };
+  }
+
+  function getColorblindDefaultIntensity(slug){
+    const defaults = COLORBLIND_DEFAULT_SETTINGS[slug];
+    return defaults && typeof defaults.intensity === 'number' ? defaults.intensity : 1;
+  }
+
+  function normalizeColorblindIntensity(slug, value){
+    const range = getColorblindIntensityRange(slug);
+    const fallback = getColorblindDefaultIntensity(slug);
+    const numeric = Number(value);
+    if(!Number.isFinite(numeric)){ return fallback; }
+    return Math.min(range.max, Math.max(range.min, numeric));
+  }
+
+  function normalizeColorblindSensitivity(value){
+    const key = typeof value === 'string' ? value.toLowerCase() : '';
+    if(Object.prototype.hasOwnProperty.call(COLORBLIND_SENSITIVITY_MULTIPLIERS, key)){
+      return key;
+    }
+    return 'moderate';
+  }
+
+  function getColorblindSensitivityMultiplier(level){
+    return COLORBLIND_SENSITIVITY_MULTIPLIERS[normalizeColorblindSensitivity(level)] || 1;
+  }
+
+  function normalizeColorblindPhotophobia(value){
+    const key = typeof value === 'string' ? value.toLowerCase() : '';
+    if(Object.prototype.hasOwnProperty.call(COLORBLIND_PHOTOPHOBIA_CONFIG, key)){
+      return key;
+    }
+    return 'moderate';
+  }
+
+  function getColorblindPhotophobiaSettings(level){
+    return COLORBLIND_PHOTOPHOBIA_CONFIG[normalizeColorblindPhotophobia(level)] || COLORBLIND_PHOTOPHOBIA_CONFIG.moderate;
+  }
+
+  function getColorblindAchromDefault(key){
+    const defaults = COLORBLIND_DEFAULT_SETTINGS[COLORBLIND_ACHROMATOPSIA_SLUG] || {};
+    if(key === 'photophobia'){
+      return defaults.photophobia || 'moderate';
+    }
+    const value = defaults[key];
+    if(Number.isFinite(value)){ return value; }
+    const range = COLORBLIND_ACHROM_CONTROL_RANGES[key];
+    return range ? range.min : 1;
+  }
+
+  function normalizeColorblindAchromValue(key, value){
+    if(key === 'photophobia'){ return normalizeColorblindPhotophobia(value); }
+    const range = COLORBLIND_ACHROM_CONTROL_RANGES[key];
+    if(!range){ return value; }
+    const numeric = Number(value);
+    if(!Number.isFinite(numeric)){ return getColorblindAchromDefault(key); }
+    return Math.min(range.max, Math.max(range.min, numeric));
+  }
+
+  function formatColorblindPercentage(value){
+    if(!Number.isFinite(value)){ return '0%'; }
+    return `${Math.round(value * 100)}%`;
+  }
+
+  function formatColorblindDecimal(value, decimals = 2){
+    if(!Number.isFinite(value)){ return '0'; }
+    const factor = Math.pow(10, decimals);
+    const rounded = Math.round(value * factor) / factor;
+    const fixed = rounded.toFixed(decimals);
+    return fixed.replace(/\.0+$|(?<=[^0])0+$/, '').replace(/\.$/, '');
+  }
+
+  function loadColorblindSettings(){
+    const base = cloneColorblindDefaults();
+    try {
+      const raw = localStorage.getItem(COLORBLIND_SETTINGS_STORAGE_KEY);
+      if(!raw){ return base; }
+      const parsed = JSON.parse(raw);
+      if(!parsed || typeof parsed !== 'object'){ return base; }
+      Object.keys(base).forEach(slug => {
+        const stored = parsed[slug];
+        if(!stored || typeof stored !== 'object'){ return; }
+        if(Object.prototype.hasOwnProperty.call(stored, 'intensity')){
+          base[slug].intensity = normalizeColorblindIntensity(slug, stored.intensity);
+        }
+        if(slug === COLORBLIND_TRITANOMALY_SLUG && Object.prototype.hasOwnProperty.call(stored, 'sensitivity')){
+          base[slug].sensitivity = normalizeColorblindSensitivity(stored.sensitivity);
+        }
+        if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+          if(Object.prototype.hasOwnProperty.call(stored, 'photophobia')){
+            base[slug].photophobia = normalizeColorblindPhotophobia(stored.photophobia);
+          }
+          if(Object.prototype.hasOwnProperty.call(stored, 'contrast')){
+            base[slug].contrast = normalizeColorblindAchromValue('contrast', stored.contrast);
+          }
+          if(Object.prototype.hasOwnProperty.call(stored, 'brightness')){
+            base[slug].brightness = normalizeColorblindAchromValue('brightness', stored.brightness);
+          }
+          if(Object.prototype.hasOwnProperty.call(stored, 'textScale')){
+            base[slug].textScale = normalizeColorblindAchromValue('textScale', stored.textScale);
+          }
+        }
+      });
+    } catch(err){ /* ignore */ }
+    return base;
+  }
+
+  function getOrCreateColorblindSettings(slug){
+    if(!Object.prototype.hasOwnProperty.call(colorblindSettings, slug)){
+      const defaults = COLORBLIND_DEFAULT_SETTINGS[slug] || {};
+      colorblindSettings[slug] = Object.assign({}, defaults);
+    }
+    return colorblindSettings[slug];
+  }
+
+  function scheduleColorblindSettingsSave(){
+    cancelScheduledColorblindSave();
+    colorblindSettingsSaveTimer = setTimeout(() => {
+      colorblindSettingsSaveTimer = null;
+      saveColorblindSettings();
+    }, 150);
+  }
+
+  function cancelScheduledColorblindSave(){
+    if(colorblindSettingsSaveTimer){
+      clearTimeout(colorblindSettingsSaveTimer);
+      colorblindSettingsSaveTimer = null;
+    }
+  }
+
+  function getSerializableColorblindSettings(){
+    const serialized = {};
+    Object.keys(COLORBLIND_DEFAULT_SETTINGS).forEach(slug => {
+      const settings = colorblindSettings[slug];
+      if(!settings){ return; }
+      const entry = {};
+      if(Object.prototype.hasOwnProperty.call(settings, 'intensity')){
+        entry.intensity = normalizeColorblindIntensity(slug, settings.intensity);
+      }
+      if(slug === COLORBLIND_TRITANOMALY_SLUG){
+        entry.sensitivity = normalizeColorblindSensitivity(settings.sensitivity);
+      }
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        entry.photophobia = normalizeColorblindPhotophobia(settings.photophobia);
+        entry.contrast = normalizeColorblindAchromValue('contrast', settings.contrast);
+        entry.brightness = normalizeColorblindAchromValue('brightness', settings.brightness);
+        entry.textScale = normalizeColorblindAchromValue('textScale', settings.textScale);
+      }
+      serialized[slug] = entry;
+    });
+    return serialized;
+  }
+
+  function saveColorblindSettings(){
+    cancelScheduledColorblindSave();
+    try {
+      localStorage.setItem(COLORBLIND_SETTINGS_STORAGE_KEY, JSON.stringify(getSerializableColorblindSettings()));
+    } catch(err){ /* ignore */ }
+  }
+
+  function updateColorblindSettings(slug, partial, options = {}){
+    const { forceRefresh = false, refresh = true, persist = true, forcePersist = false, updateUI = true } = options;
+    const settings = getOrCreateColorblindSettings(slug);
+    let changed = false;
+    if(partial && typeof partial === 'object'){
+      Object.keys(partial).forEach(key => {
+        let normalized;
+        if(key === 'intensity'){
+          normalized = normalizeColorblindIntensity(slug, partial[key]);
+        } else if(slug === COLORBLIND_TRITANOMALY_SLUG && key === 'sensitivity'){
+          normalized = normalizeColorblindSensitivity(partial[key]);
+        } else if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+          if(key === 'photophobia'){
+            normalized = normalizeColorblindPhotophobia(partial[key]);
+          } else if(key === 'contrast' || key === 'brightness' || key === 'textScale'){
+            normalized = normalizeColorblindAchromValue(key, partial[key]);
+          }
+        }
+        if(typeof normalized === 'undefined'){ return; }
+        if(settings[key] !== normalized){
+          settings[key] = normalized;
+          changed = true;
+        }
+      });
+    }
+    if(updateUI){ updateColorblindControlDisplay(slug); }
+    if(refresh && (changed || forceRefresh)){ refreshColorblindFilters(); }
+    if(persist && (changed || forcePersist)){ scheduleColorblindSettingsSave(); }
+    return settings;
+  }
+
+  function updateColorblindControlDisplay(slug){
+    const refs = colorblindControlRefs.get(slug);
+    if(!refs){ return; }
+    const settings = getOrCreateColorblindSettings(slug);
+    if(refs.intensityInput){
+      const intensity = normalizeColorblindIntensity(slug, settings.intensity);
+      if(settings.intensity !== intensity){ settings.intensity = intensity; }
+      const display = formatColorblindPercentage(intensity);
+      refs.intensityInput.value = `${intensity}`;
+      refs.intensityInput.setAttribute('aria-valuetext', display);
+      if(refs.intensityValue){ refs.intensityValue.textContent = display; }
+    }
+    if(refs.sensitivitySelect){
+      const sensitivity = normalizeColorblindSensitivity(settings.sensitivity);
+      if(settings.sensitivity !== sensitivity){ settings.sensitivity = sensitivity; }
+      refs.sensitivitySelect.value = sensitivity;
+    }
+    if(refs.photophobiaSelect){
+      const photophobia = normalizeColorblindPhotophobia(settings.photophobia);
+      if(settings.photophobia !== photophobia){ settings.photophobia = photophobia; }
+      refs.photophobiaSelect.value = photophobia;
+    }
+    if(refs.contrastInput){
+      const contrast = normalizeColorblindAchromValue('contrast', settings.contrast);
+      if(settings.contrast !== contrast){ settings.contrast = contrast; }
+      const display = formatColorblindDecimal(contrast, 2);
+      refs.contrastInput.value = `${contrast}`;
+      refs.contrastInput.setAttribute('aria-valuetext', display);
+      if(refs.contrastValue){ refs.contrastValue.textContent = display; }
+    }
+    if(refs.brightnessInput){
+      const brightness = normalizeColorblindAchromValue('brightness', settings.brightness);
+      if(settings.brightness !== brightness){ settings.brightness = brightness; }
+      const display = formatColorblindDecimal(brightness, 2);
+      refs.brightnessInput.value = `${brightness}`;
+      refs.brightnessInput.setAttribute('aria-valuetext', display);
+      if(refs.brightnessValue){ refs.brightnessValue.textContent = display; }
+    }
+    if(refs.textScaleInput){
+      const textScale = normalizeColorblindAchromValue('textScale', settings.textScale);
+      if(settings.textScale !== textScale){ settings.textScale = textScale; }
+      const display = formatColorblindPercentage(textScale);
+      refs.textScaleInput.value = `${textScale}`;
+      refs.textScaleInput.setAttribute('aria-valuetext', display);
+      if(refs.textScaleValue){ refs.textScaleValue.textContent = display; }
+    }
+  }
+
+  function setColorblindControlsDisabled(slug, disabled){
+    const refs = colorblindControlRefs.get(slug);
+    if(!refs){ return; }
+    [
+      refs.intensityInput,
+      refs.sensitivitySelect,
+      refs.photophobiaSelect,
+      refs.contrastInput,
+      refs.brightnessInput,
+      refs.textScaleInput,
+    ].forEach(el => {
+      if(el){ el.disabled = disabled; }
+    });
+  }
+
+  function ensureColorblindAchroDimmer(){
+    if(colorblindAchroDimmer && colorblindAchroDimmer.isConnected){ return colorblindAchroDimmer; }
+    let dimmer = document.getElementById('a11y-colorblind-achro-dimmer');
+    if(!dimmer){
+      dimmer = document.createElement('div');
+      dimmer.id = 'a11y-colorblind-achro-dimmer';
+      dimmer.className = 'a11y-achro-dimmer';
+    }
+    if(document.body && !dimmer.isConnected){
+      document.body.appendChild(dimmer);
+    }
+    colorblindAchroDimmer = dimmer;
+    return dimmer;
+  }
+
+  function applyColorblindAchromatopsiaExtras(){
+    if(!colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG)){
+      if(colorblindAchroDimmer){ colorblindAchroDimmer.style.opacity = '0'; }
+      document.documentElement.classList.remove('a11y-achromatopsia-text-boost');
+      document.documentElement.style.removeProperty('--a11y-achrom-text-scale');
+      return;
+    }
+    const settings = getOrCreateColorblindSettings(COLORBLIND_ACHROMATOPSIA_SLUG);
+    const intensity = normalizeColorblindIntensity(COLORBLIND_ACHROMATOPSIA_SLUG, settings.intensity);
+    const photophobia = getColorblindPhotophobiaSettings(settings.photophobia);
+    const dimmer = ensureColorblindAchroDimmer();
+    if(dimmer){
+      const alpha = Math.min(0.9, Math.max(0, intensity * 0.6 * photophobia.dimmingFactor));
+      dimmer.style.opacity = `${alpha}`;
+    }
+    const textScale = normalizeColorblindAchromValue('textScale', settings.textScale);
+    if(textScale > 1.001){
+      document.documentElement.classList.add('a11y-achromatopsia-text-boost');
+      document.documentElement.style.setProperty('--a11y-achrom-text-scale', `${textScale}`);
+    } else {
+      document.documentElement.classList.remove('a11y-achromatopsia-text-boost');
+      document.documentElement.style.removeProperty('--a11y-achrom-text-scale');
+    }
+  }
+
+  function resetColorblindSettings(options = {}){
+    const { persist = true } = options;
+    cancelScheduledColorblindSave();
+    colorblindSettings = cloneColorblindDefaults();
+    colorblindControlRefs.forEach((_, slug) => updateColorblindControlDisplay(slug));
+    if(persist){ saveColorblindSettings(); }
+    refreshColorblindFilters();
+  }
+
+  function isManagedColorblindSlug(slug){
+    return COLORBLIND_CONTROLLED_SET.has(slug);
+  }
+
+  function getActiveColorblindDisabledSlugs(){
+    const disabled = new Set();
+    const hasAchromatopsia = colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasAchromatopsia){
+      COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+        if(!Array.isArray(group)){ return; }
+        group.forEach(slug => {
+          if(typeof slug === 'string' && slug){
+            disabled.add(slug);
+          }
+        });
+      });
+      return disabled;
+    }
+
+    const hasOtherActive = Array.from(colorblindActiveFilters).some(slug => slug !== COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasOtherActive){
+      disabled.add(COLORBLIND_ACHROMATOPSIA_SLUG);
+    }
+
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      const groupActive = group.some(slug => colorblindActiveFilters.has(slug));
+      if(!groupActive){ return; }
+      group.forEach(slug => {
+        if(!colorblindActiveFilters.has(slug) && typeof slug === 'string' && slug){
+          disabled.add(slug);
+        }
+      });
+    });
+
+    return disabled;
+  }
+
+  function updateColorblindToggleAvailability(){
+    if(isUpdatingColorblindAvailability){ return; }
+    isUpdatingColorblindAvailability = true;
+    const disabledSlugs = getActiveColorblindDisabledSlugs();
+    COLORBLIND_CONTROLLED_SLUGS.forEach(slug => {
+      const input = featureInputs.get(slug);
+      const shouldDisable = disabledSlugs.has(slug);
+      const isActive = colorblindActiveFilters.has(slug);
+      const disableInput = shouldDisable && !isActive;
+      if(input){
+        if(input.disabled !== disableInput){
+          input.disabled = disableInput;
+        }
+        const switchEl = input.closest('.a11y-switch');
+        if(switchEl){
+          switchEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ switchEl.setAttribute('aria-disabled', 'true'); }
+          else { switchEl.removeAttribute('aria-disabled'); }
+        }
+        const rowEl = input.closest('.a11y-subfeature');
+        if(rowEl){
+          rowEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ rowEl.setAttribute('aria-disabled', 'true'); }
+          else { rowEl.removeAttribute('aria-disabled'); }
+        }
+      }
+      setColorblindControlsDisabled(slug, disableInput);
+    });
+    isUpdatingColorblindAvailability = false;
+    disabledSlugs.forEach(slug => {
+      if(colorblindActiveFilters.has(slug)){
+        toggleFeature(slug, false);
+      }
+    });
+  }
 
   function getColorblindShortName(slug){
     if(typeof slug !== 'string'){ return ''; }
@@ -226,16 +705,32 @@
     colorblindActiveFilters.forEach(slug => {
       const preset = COLORBLIND_FILTER_PRESETS[slug];
       if(!preset){ return; }
-      const intensity = typeof preset.intensity === 'number' ? preset.intensity : 1;
-      const multiplier = typeof preset.multiplier === 'number' ? preset.multiplier : 1;
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        const settings = getOrCreateColorblindSettings(slug);
+        const contrastValue = normalizeColorblindAchromValue('contrast', settings.contrast);
+        const brightnessBase = normalizeColorblindAchromValue('brightness', settings.brightness);
+        const photophobia = getColorblindPhotophobiaSettings(settings.photophobia);
+        const brightnessValue = clampFloat(brightnessBase * photophobia.brightnessFactor, 0.2, 3);
+        const grayBase = typeof preset.grayscale === 'number' ? clampFloat(preset.grayscale, 0, 1) : 1;
+        grayscale = Math.max(grayscale, grayBase);
+        contrast *= contrastValue;
+        brightness *= brightnessValue;
+        return;
+      }
+
+      const settings = getOrCreateColorblindSettings(slug);
+      const intensity = normalizeColorblindIntensity(slug, settings.intensity);
+      const baseMultiplier = typeof preset.multiplier === 'number' ? preset.multiplier : 1;
+      let multiplier = baseMultiplier;
+      if(slug === COLORBLIND_TRITANOMALY_SLUG){
+        multiplier *= getColorblindSensitivityMultiplier(settings.sensitivity);
+      }
       const effective = intensity * multiplier;
       if(typeof preset.hue === 'number'){ hueRotate += preset.hue * effective; }
       if(typeof preset.saturate === 'number'){ saturate *= 1 + (preset.saturate * effective); }
       if(typeof preset.contrast === 'number'){ contrast *= 1 + (preset.contrast * effective); }
       if(typeof preset.sepia === 'number'){ sepia += preset.sepia * effective; }
-      if(typeof preset.grayscale === 'number'){ grayscale = Math.max(grayscale, preset.grayscale); }
-      if(typeof preset.contrastFactor === 'number'){ contrast *= preset.contrastFactor; }
-      if(typeof preset.brightnessFactor === 'number'){ brightness *= preset.brightnessFactor; }
+      if(typeof preset.grayscale === 'number'){ grayscale = Math.max(grayscale, clampFloat(preset.grayscale, 0, 1)); }
     });
 
     const parts = [];
@@ -274,16 +769,39 @@
     const filterValue = buildColorblindFilterValue();
     setVisualFilterComponent('colorblind', filterValue);
     updateColorblindRootState();
+    applyColorblindAchromatopsiaExtras();
   }
 
   function setColorblindFilterState(slug, enabled){
     if(!COLORBLIND_FILTER_PRESETS[slug]){ return; }
     if(enabled){
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        COLORBLIND_CONTROLLED_SLUGS.forEach(otherSlug => {
+          if(otherSlug === slug){ return; }
+          if(colorblindActiveFilters.has(otherSlug)){
+            toggleFeature(otherSlug, false);
+          }
+        });
+      } else {
+        if(colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG)){
+          toggleFeature(COLORBLIND_ACHROMATOPSIA_SLUG, false);
+        }
+        COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+          if(!Array.isArray(group) || !group.includes(slug)){ return; }
+          group.forEach(otherSlug => {
+            if(otherSlug === slug){ return; }
+            if(colorblindActiveFilters.has(otherSlug)){
+              toggleFeature(otherSlug, false);
+            }
+          });
+        });
+      }
       colorblindActiveFilters.add(slug);
     } else {
       colorblindActiveFilters.delete(slug);
     }
     refreshColorblindFilters();
+    updateColorblindToggleAvailability();
   }
 
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
@@ -674,6 +1192,9 @@
     const stored = Object.prototype.hasOwnProperty.call(featureState, key) ? !!featureState[key] : false;
     input.checked = stored;
     input.addEventListener('change', () => toggleFeature(key, input.checked));
+    if(isManagedColorblindSlug(key)){
+      updateColorblindToggleAvailability();
+    }
   }
 
   function buildSwitch(slug, ariaLabel){
@@ -711,6 +1232,227 @@
       registerFeatureInput(slug, inputEl);
     }
     return fragment;
+  }
+
+  function createColorblindCard(feature){
+    const children = Array.isArray(feature.children) ? feature.children : [];
+    if(!children.length){ return null; }
+
+    const article = document.createElement('article');
+    article.className = 'a11y-card a11y-card--colorblind has-children';
+    article.setAttribute('data-role', 'feature-card');
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.setAttribute('data-role', 'feature-meta');
+
+    const labelEl = document.createElement('span');
+    labelEl.className = 'label';
+    labelEl.textContent = feature.label || '';
+    meta.appendChild(labelEl);
+
+    if(feature.hint){
+      const hintEl = document.createElement('span');
+      hintEl.className = 'hint';
+      hintEl.textContent = feature.hint;
+      meta.appendChild(hintEl);
+    }
+
+    article.appendChild(meta);
+
+    const list = document.createElement('div');
+    list.className = 'a11y-subfeatures';
+    article.appendChild(list);
+
+    let rendered = 0;
+
+    children.forEach(child => {
+      if(!child || typeof child.slug !== 'string' || !child.slug || typeof child.label !== 'string' || !child.label){
+        return;
+      }
+
+      const slug = child.slug;
+      const baseId = `a11y-colorblind-${slug.replace(/[^a-z0-9\-]+/gi, '-').toLowerCase()}`;
+      const row = document.createElement('div');
+      row.className = 'a11y-subfeature a11y-colorblind-item';
+      row.dataset.colorblindSlug = slug;
+
+      const header = document.createElement('div');
+      header.className = 'a11y-colorblind-item__header';
+
+      const labelWrapper = document.createElement('div');
+      labelWrapper.className = 'a11y-colorblind-item__label';
+
+      const title = document.createElement('span');
+      title.className = 'label';
+      title.textContent = child.label;
+      labelWrapper.appendChild(title);
+
+      if(child.hint){
+        const hint = document.createElement('span');
+        hint.className = 'hint';
+        hint.textContent = child.hint;
+        labelWrapper.appendChild(hint);
+      }
+
+      header.appendChild(labelWrapper);
+
+      const switchEl = buildSwitch(slug, child.aria_label || child.label || '');
+      if(!switchEl){ return; }
+      header.appendChild(switchEl);
+      row.appendChild(header);
+
+      const controls = document.createElement('div');
+      controls.className = 'a11y-colorblind-item__controls';
+      row.appendChild(controls);
+
+      const buildRangeControl = (idSuffix, labelText, range) => {
+        const field = document.createElement('div');
+        field.className = 'a11y-colorblind-field a11y-colorblind-field--range';
+        const fieldHeader = document.createElement('div');
+        fieldHeader.className = 'a11y-colorblind-field-header';
+        const label = document.createElement('label');
+        label.className = 'a11y-colorblind-field-label';
+        const labelId = `${baseId}-${idSuffix}-label`;
+        label.id = labelId;
+        label.textContent = labelText;
+        fieldHeader.appendChild(label);
+        const value = document.createElement('span');
+        value.className = 'a11y-colorblind-field-value';
+        value.id = `${baseId}-${idSuffix}-value`;
+        fieldHeader.appendChild(value);
+        field.appendChild(fieldHeader);
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.className = 'a11y-colorblind-range';
+        input.id = `${baseId}-${idSuffix}-input`;
+        input.min = `${range.min}`;
+        input.max = `${range.max}`;
+        input.step = `${range.step}`;
+        input.setAttribute('aria-labelledby', `${labelId} ${value.id}`);
+        field.appendChild(input);
+        return { field, input, value };
+      };
+
+      const intensityRange = getColorblindIntensityRange(slug);
+      const intensityLabelText = slug === COLORBLIND_ACHROMATOPSIA_SLUG ? 'Confort lumineux' : 'Intensit\u00e9';
+      const intensityControl = buildRangeControl('intensity', intensityLabelText, intensityRange);
+      controls.appendChild(intensityControl.field);
+
+      const refs = {
+        container: row,
+        intensityInput: intensityControl.input,
+        intensityValue: intensityControl.value,
+      };
+
+      intensityControl.input.addEventListener('input', () => {
+        updateColorblindSettings(slug, { intensity: parseFloat(intensityControl.input.value) }, { forceRefresh: true, persist: false });
+      });
+      intensityControl.input.addEventListener('change', () => {
+        updateColorblindSettings(slug, { intensity: parseFloat(intensityControl.input.value) }, { forceRefresh: true });
+      });
+
+      if(slug === COLORBLIND_TRITANOMALY_SLUG){
+        const sensitivityField = document.createElement('div');
+        sensitivityField.className = 'a11y-colorblind-field';
+        const sensitivityLabel = document.createElement('label');
+        const sensitivityLabelId = `${baseId}-sensitivity-label`;
+        sensitivityLabel.id = sensitivityLabelId;
+        sensitivityLabel.className = 'a11y-colorblind-field-label';
+        sensitivityLabel.setAttribute('for', `${baseId}-sensitivity-select`);
+        sensitivityLabel.textContent = 'Niveau de sensibilit\u00e9';
+        sensitivityField.appendChild(sensitivityLabel);
+        const sensitivitySelect = document.createElement('select');
+        sensitivitySelect.id = `${baseId}-sensitivity-select`;
+        sensitivitySelect.className = 'a11y-colorblind-select';
+        sensitivitySelect.setAttribute('aria-labelledby', sensitivityLabelId);
+        COLORBLIND_SENSITIVITY_OPTIONS.forEach(option => {
+          const optionEl = document.createElement('option');
+          optionEl.value = option.value;
+          optionEl.textContent = option.label;
+          sensitivitySelect.appendChild(optionEl);
+        });
+        sensitivityField.appendChild(sensitivitySelect);
+        controls.appendChild(sensitivityField);
+        sensitivitySelect.addEventListener('change', () => {
+          updateColorblindSettings(slug, { sensitivity: sensitivitySelect.value }, { forceRefresh: true });
+        });
+        refs.sensitivitySelect = sensitivitySelect;
+      }
+
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        const photophobiaField = document.createElement('div');
+        photophobiaField.className = 'a11y-colorblind-field';
+        const photophobiaLabel = document.createElement('label');
+        const photophobiaLabelId = `${baseId}-photophobia-label`;
+        photophobiaLabel.id = photophobiaLabelId;
+        photophobiaLabel.className = 'a11y-colorblind-field-label';
+        photophobiaLabel.setAttribute('for', `${baseId}-photophobia-select`);
+        photophobiaLabel.textContent = 'Niveau de photophobie';
+        photophobiaField.appendChild(photophobiaLabel);
+        const photophobiaSelect = document.createElement('select');
+        photophobiaSelect.id = `${baseId}-photophobia-select`;
+        photophobiaSelect.className = 'a11y-colorblind-select';
+        photophobiaSelect.setAttribute('aria-labelledby', photophobiaLabelId);
+        COLORBLIND_PHOTOPHOBIA_OPTIONS.forEach(option => {
+          const optionEl = document.createElement('option');
+          optionEl.value = option.value;
+          optionEl.textContent = option.label;
+          photophobiaSelect.appendChild(optionEl);
+        });
+        photophobiaField.appendChild(photophobiaSelect);
+        controls.appendChild(photophobiaField);
+        photophobiaSelect.addEventListener('change', () => {
+          updateColorblindSettings(slug, { photophobia: photophobiaSelect.value }, { forceRefresh: true, forcePersist: true });
+        });
+        refs.photophobiaSelect = photophobiaSelect;
+
+        const contrastControl = buildRangeControl('contrast', 'Contraste', COLORBLIND_ACHROM_CONTROL_RANGES.contrast);
+        controls.appendChild(contrastControl.field);
+        contrastControl.input.addEventListener('input', () => {
+          updateColorblindSettings(slug, { contrast: parseFloat(contrastControl.input.value) }, { forceRefresh: true, persist: false });
+        });
+        contrastControl.input.addEventListener('change', () => {
+          updateColorblindSettings(slug, { contrast: parseFloat(contrastControl.input.value) }, { forceRefresh: true });
+        });
+        refs.contrastInput = contrastControl.input;
+        refs.contrastValue = contrastControl.value;
+
+        const brightnessControl = buildRangeControl('brightness', 'Luminosit\u00e9', COLORBLIND_ACHROM_CONTROL_RANGES.brightness);
+        controls.appendChild(brightnessControl.field);
+        brightnessControl.input.addEventListener('input', () => {
+          updateColorblindSettings(slug, { brightness: parseFloat(brightnessControl.input.value) }, { forceRefresh: true, persist: false });
+        });
+        brightnessControl.input.addEventListener('change', () => {
+          updateColorblindSettings(slug, { brightness: parseFloat(brightnessControl.input.value) }, { forceRefresh: true });
+        });
+        refs.brightnessInput = brightnessControl.input;
+        refs.brightnessValue = brightnessControl.value;
+
+        const textScaleControl = buildRangeControl('textscale', 'Taille du texte', COLORBLIND_ACHROM_CONTROL_RANGES.textScale);
+        controls.appendChild(textScaleControl.field);
+        textScaleControl.input.addEventListener('input', () => {
+          updateColorblindSettings(slug, { textScale: parseFloat(textScaleControl.input.value) }, { forceRefresh: true, persist: false });
+        });
+        textScaleControl.input.addEventListener('change', () => {
+          updateColorblindSettings(slug, { textScale: parseFloat(textScaleControl.input.value) }, { forceRefresh: true });
+        });
+        refs.textScaleInput = textScaleControl.input;
+        refs.textScaleValue = textScaleControl.value;
+      }
+
+      colorblindControlRefs.set(slug, refs);
+      updateColorblindControlDisplay(slug);
+
+      list.appendChild(row);
+      rendered++;
+    });
+
+    if(!rendered){ return null; }
+
+    updateColorblindToggleAvailability();
+
+    return article;
   }
 
   function createFeatureGroup(feature){
@@ -4756,7 +5498,11 @@ ${interactiveSelectors} {
       let instance = null;
 
       if(hasChildren){
-        instance = createFeatureGroup(feature);
+        if(typeof feature.slug === 'string' && feature.slug === 'vision-daltonisme'){
+          instance = createColorblindCard(feature);
+        } else {
+          instance = createFeatureGroup(feature);
+        }
       } else {
         if(typeof feature.slug !== 'string' || !feature.slug){
           return;
@@ -5113,11 +5859,13 @@ ${interactiveSelectors} {
       try { localStorage.removeItem(BRIGHTNESS_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(READING_GUIDE_SETTINGS_KEY); } catch(err){}
       try { localStorage.removeItem(READING_GUIDE_SUMMARY_POS_KEY); } catch(err){}
+      try { localStorage.removeItem(COLORBLIND_SETTINGS_STORAGE_KEY); } catch(err){}
       document.documentElement.style.removeProperty('--a11y-launcher-x');
       document.documentElement.style.removeProperty('--a11y-launcher-y');
       launcherLastPos = null;
       hasCustomLauncherPosition = false;
       applyPanelSide('right');
+      resetColorblindSettings({ persist: false });
       resetBrightnessSettings({ persist: false });
       resetButtonSettings({ persist: false });
       resetCursorSettings();
