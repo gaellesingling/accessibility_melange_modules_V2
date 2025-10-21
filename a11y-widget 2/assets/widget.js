@@ -206,54 +206,28 @@
     'vision-daltonisme-achromatopsie': { grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
   };
 
-  const COLORBLIND_COMBINATION_RULES = [
-    {
-      requiredActive: [
-        'vision-daltonisme-deuteranopie',
-        'vision-daltonisme-protanopie',
-        'vision-daltonisme-protanomalie',
-        'vision-daltonisme-tritanopie',
-        'vision-daltonisme-tritanomalie',
-      ],
-      disabled: [
-        'vision-daltonisme-deuteranomalie',
-        'vision-daltonisme-achromatopsie',
-      ],
-    },
-    {
-      requiredActive: [
-        'vision-daltonisme-deuteranomalie',
-        'vision-daltonisme-protanopie',
-        'vision-daltonisme-protanomalie',
-        'vision-daltonisme-tritanopie',
-        'vision-daltonisme-tritanomalie',
-      ],
-      disabled: [
-        'vision-daltonisme-deuteranopie',
-        'vision-daltonisme-achromatopsie',
-      ],
-    },
-    {
-      requiredActive: [
-        'vision-daltonisme-protanopie',
-        'vision-daltonisme-deuteranopie',
-        'vision-daltonisme-deuteranomalie',
-        'vision-daltonisme-tritanopie',
-        'vision-daltonisme-tritanomalie',
-      ],
-      disabled: [
-        'vision-daltonisme-protanomalie',
-        'vision-daltonisme-achromatopsie',
-      ],
-    },
+  const COLORBLIND_ACHROMATOPSIA_SLUG = 'vision-daltonisme-achromatopsie';
+
+  const COLORBLIND_EXCLUSIVE_GROUPS = [
+    [
+      'vision-daltonisme-deuteranopie',
+      'vision-daltonisme-deuteranomalie',
+    ],
+    [
+      'vision-daltonisme-protanopie',
+      'vision-daltonisme-protanomalie',
+    ],
+    [
+      'vision-daltonisme-tritanopie',
+      'vision-daltonisme-tritanomalie',
+    ],
   ];
 
-  const COLORBLIND_DISABLE_TARGETS = (() => {
-    const set = new Set();
-    COLORBLIND_COMBINATION_RULES.forEach(rule => {
-      if(!rule){ return; }
-      const list = Array.isArray(rule.disabled) ? rule.disabled : [];
-      list.forEach(slug => {
+  const COLORBLIND_CONTROLLED_SLUGS = (() => {
+    const set = new Set([COLORBLIND_ACHROMATOPSIA_SLUG]);
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      group.forEach(slug => {
         if(typeof slug === 'string' && slug){
           set.add(slug);
         }
@@ -262,7 +236,7 @@
     return set;
   })();
 
-  const COLORBLIND_CONTROLLED_SET = new Set(COLORBLIND_DISABLE_TARGETS);
+  const COLORBLIND_CONTROLLED_SET = new Set(COLORBLIND_CONTROLLED_SLUGS);
   let isUpdatingColorblindAvailability = false;
 
   const colorblindActiveFilters = new Set();
@@ -274,19 +248,35 @@
 
   function getActiveColorblindDisabledSlugs(){
     const disabled = new Set();
-    COLORBLIND_COMBINATION_RULES.forEach(rule => {
-      if(!rule){ return; }
-      const required = Array.isArray(rule.requiredActive) ? rule.requiredActive : [];
-      if(!required.length){ return; }
-      const allActive = required.every(slug => colorblindActiveFilters.has(slug));
-      if(!allActive){ return; }
-      const targets = Array.isArray(rule.disabled) ? rule.disabled : [];
-      targets.forEach(slug => {
-        if(typeof slug === 'string' && slug){
+    const hasAchromatopsia = colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasAchromatopsia){
+      COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+        if(!Array.isArray(group)){ return; }
+        group.forEach(slug => {
+          if(typeof slug === 'string' && slug){
+            disabled.add(slug);
+          }
+        });
+      });
+      return disabled;
+    }
+
+    const hasOtherActive = Array.from(colorblindActiveFilters).some(slug => slug !== COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasOtherActive){
+      disabled.add(COLORBLIND_ACHROMATOPSIA_SLUG);
+    }
+
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      const groupActive = group.some(slug => colorblindActiveFilters.has(slug));
+      if(!groupActive){ return; }
+      group.forEach(slug => {
+        if(!colorblindActiveFilters.has(slug) && typeof slug === 'string' && slug){
           disabled.add(slug);
         }
       });
     });
+
     return disabled;
   }
 
@@ -294,23 +284,25 @@
     if(isUpdatingColorblindAvailability){ return; }
     isUpdatingColorblindAvailability = true;
     const disabledSlugs = getActiveColorblindDisabledSlugs();
-    COLORBLIND_DISABLE_TARGETS.forEach(slug => {
+    COLORBLIND_CONTROLLED_SLUGS.forEach(slug => {
       const input = featureInputs.get(slug);
       const shouldDisable = disabledSlugs.has(slug);
+      const isActive = colorblindActiveFilters.has(slug);
       if(input){
-        if(input.disabled !== shouldDisable){
-          input.disabled = shouldDisable;
+        const disableInput = shouldDisable && !isActive;
+        if(input.disabled !== disableInput){
+          input.disabled = disableInput;
         }
         const switchEl = input.closest('.a11y-switch');
         if(switchEl){
-          switchEl.classList.toggle('is-disabled', shouldDisable);
-          if(shouldDisable){ switchEl.setAttribute('aria-disabled', 'true'); }
+          switchEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ switchEl.setAttribute('aria-disabled', 'true'); }
           else { switchEl.removeAttribute('aria-disabled'); }
         }
         const rowEl = input.closest('.a11y-subfeature');
         if(rowEl){
-          rowEl.classList.toggle('is-disabled', shouldDisable);
-          if(shouldDisable){ rowEl.setAttribute('aria-disabled', 'true'); }
+          rowEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ rowEl.setAttribute('aria-disabled', 'true'); }
           else { rowEl.removeAttribute('aria-disabled'); }
         }
       }
@@ -393,6 +385,27 @@
   function setColorblindFilterState(slug, enabled){
     if(!COLORBLIND_FILTER_PRESETS[slug]){ return; }
     if(enabled){
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        COLORBLIND_CONTROLLED_SLUGS.forEach(otherSlug => {
+          if(otherSlug === slug){ return; }
+          if(colorblindActiveFilters.has(otherSlug)){
+            toggleFeature(otherSlug, false);
+          }
+        });
+      } else {
+        if(colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG)){
+          toggleFeature(COLORBLIND_ACHROMATOPSIA_SLUG, false);
+        }
+        COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+          if(!Array.isArray(group) || !group.includes(slug)){ return; }
+          group.forEach(otherSlug => {
+            if(otherSlug === slug){ return; }
+            if(colorblindActiveFilters.has(otherSlug)){
+              toggleFeature(otherSlug, false);
+            }
+          });
+        });
+      }
       colorblindActiveFilters.add(slug);
     } else {
       colorblindActiveFilters.delete(slug);
