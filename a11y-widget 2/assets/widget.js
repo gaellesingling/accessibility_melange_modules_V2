@@ -206,8 +206,114 @@
     'vision-daltonisme-achromatopsie': { grayscale: 1, contrastFactor: 1.2, brightnessFactor: 0.9 },
   };
 
+  const COLORBLIND_ACHROMATOPSIA_SLUG = 'vision-daltonisme-achromatopsie';
+
+  const COLORBLIND_EXCLUSIVE_GROUPS = [
+    [
+      'vision-daltonisme-deuteranopie',
+      'vision-daltonisme-deuteranomalie',
+    ],
+    [
+      'vision-daltonisme-protanopie',
+      'vision-daltonisme-protanomalie',
+    ],
+    [
+      'vision-daltonisme-tritanopie',
+      'vision-daltonisme-tritanomalie',
+    ],
+  ];
+
+  const COLORBLIND_CONTROLLED_SLUGS = (() => {
+    const set = new Set([COLORBLIND_ACHROMATOPSIA_SLUG]);
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      group.forEach(slug => {
+        if(typeof slug === 'string' && slug){
+          set.add(slug);
+        }
+      });
+    });
+    return set;
+  })();
+
+  const COLORBLIND_CONTROLLED_SET = new Set(COLORBLIND_CONTROLLED_SLUGS);
+  let isUpdatingColorblindAvailability = false;
+
   const colorblindActiveFilters = new Set();
   const colorblindRootClasses = new Set();
+
+  function isManagedColorblindSlug(slug){
+    return COLORBLIND_CONTROLLED_SET.has(slug);
+  }
+
+  function getActiveColorblindDisabledSlugs(){
+    const disabled = new Set();
+    const hasAchromatopsia = colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasAchromatopsia){
+      COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+        if(!Array.isArray(group)){ return; }
+        group.forEach(slug => {
+          if(typeof slug === 'string' && slug){
+            disabled.add(slug);
+          }
+        });
+      });
+      return disabled;
+    }
+
+    const hasOtherActive = Array.from(colorblindActiveFilters).some(slug => slug !== COLORBLIND_ACHROMATOPSIA_SLUG);
+    if(hasOtherActive){
+      disabled.add(COLORBLIND_ACHROMATOPSIA_SLUG);
+    }
+
+    COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+      if(!Array.isArray(group)){ return; }
+      const groupActive = group.some(slug => colorblindActiveFilters.has(slug));
+      if(!groupActive){ return; }
+      group.forEach(slug => {
+        if(!colorblindActiveFilters.has(slug) && typeof slug === 'string' && slug){
+          disabled.add(slug);
+        }
+      });
+    });
+
+    return disabled;
+  }
+
+  function updateColorblindToggleAvailability(){
+    if(isUpdatingColorblindAvailability){ return; }
+    isUpdatingColorblindAvailability = true;
+    const disabledSlugs = getActiveColorblindDisabledSlugs();
+    COLORBLIND_CONTROLLED_SLUGS.forEach(slug => {
+      const input = featureInputs.get(slug);
+      const shouldDisable = disabledSlugs.has(slug);
+      const isActive = colorblindActiveFilters.has(slug);
+      if(input){
+        const disableInput = shouldDisable && !isActive;
+        if(input.disabled !== disableInput){
+          input.disabled = disableInput;
+        }
+        const switchEl = input.closest('.a11y-switch');
+        if(switchEl){
+          switchEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ switchEl.setAttribute('aria-disabled', 'true'); }
+          else { switchEl.removeAttribute('aria-disabled'); }
+        }
+        const rowEl = input.closest('.a11y-subfeature');
+        if(rowEl){
+          rowEl.classList.toggle('is-disabled', disableInput);
+          if(disableInput){ rowEl.setAttribute('aria-disabled', 'true'); }
+          else { rowEl.removeAttribute('aria-disabled'); }
+        }
+      }
+    });
+    isUpdatingColorblindAvailability = false;
+    disabledSlugs.forEach(slug => {
+      if(colorblindActiveFilters.has(slug)){
+        toggleFeature(slug, false);
+      }
+    });
+  }
 
   function getColorblindShortName(slug){
     if(typeof slug !== 'string'){ return ''; }
@@ -279,11 +385,33 @@
   function setColorblindFilterState(slug, enabled){
     if(!COLORBLIND_FILTER_PRESETS[slug]){ return; }
     if(enabled){
+      if(slug === COLORBLIND_ACHROMATOPSIA_SLUG){
+        COLORBLIND_CONTROLLED_SLUGS.forEach(otherSlug => {
+          if(otherSlug === slug){ return; }
+          if(colorblindActiveFilters.has(otherSlug)){
+            toggleFeature(otherSlug, false);
+          }
+        });
+      } else {
+        if(colorblindActiveFilters.has(COLORBLIND_ACHROMATOPSIA_SLUG)){
+          toggleFeature(COLORBLIND_ACHROMATOPSIA_SLUG, false);
+        }
+        COLORBLIND_EXCLUSIVE_GROUPS.forEach(group => {
+          if(!Array.isArray(group) || !group.includes(slug)){ return; }
+          group.forEach(otherSlug => {
+            if(otherSlug === slug){ return; }
+            if(colorblindActiveFilters.has(otherSlug)){
+              toggleFeature(otherSlug, false);
+            }
+          });
+        });
+      }
       colorblindActiveFilters.add(slug);
     } else {
       colorblindActiveFilters.delete(slug);
     }
     refreshColorblindFilters();
+    updateColorblindToggleAvailability();
   }
 
   const DYSLEXIA_SLUG = 'cognitif-dyslexie';
@@ -674,6 +802,9 @@
     const stored = Object.prototype.hasOwnProperty.call(featureState, key) ? !!featureState[key] : false;
     input.checked = stored;
     input.addEventListener('change', () => toggleFeature(key, input.checked));
+    if(isManagedColorblindSlug(key)){
+      updateColorblindToggleAvailability();
+    }
   }
 
   function buildSwitch(slug, ariaLabel){
